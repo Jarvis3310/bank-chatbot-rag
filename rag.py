@@ -17,6 +17,7 @@ from pathlib import Path
 
 import llm
 from embedding import Embedder, OpenAIEmbedder
+from questions import OpenAIQuestionGenerator, QuestionGenerator
 from vector_index import VectorIndex, degrade
 
 # 口語 → 知識庫用語。BM25 只比對字面，這張表補上常見說法。
@@ -213,6 +214,7 @@ class RAG:
         vector_dir: str | Path | None = None,
         clock: Callable[[], float] = time.monotonic,
         strict: bool = False,  # True：向量檢索用不了就丟例外、不退回（eval 用）
+        generator: QuestionGenerator | None = None,  # 建庫時生成問法；只注入 embedder（測試）時不生成
     ):
         mode = Mode(mode)  # 不支援的模式丟 ValueError
         self.chunks = load_chunks(Path(kb_dir))
@@ -222,10 +224,11 @@ class RAG:
         self.vectors: VectorIndex | None = None  # 沒 key 或向量庫打不開時，整段執行期間都用退回模式
         if mode is Mode.HYBRID:
             try:
-                embedder = embedder or OpenAIEmbedder()
+                if embedder is None:
+                    embedder, generator = OpenAIEmbedder(), generator or OpenAIQuestionGenerator()
                 # 向量庫資料夾預設放在知識庫旁邊，不進版控
                 path = vector_dir or Path(kb_dir).parent / "vector_store"
-                self.vectors = VectorIndex(self.chunks, embedder, path, clock, strict)
+                self.vectors = VectorIndex(self.chunks, embedder, path, clock, strict, generator)
             except Exception as e:
                 degrade(strict, "向量檢索用不了，改用退回模式：", e)
 
