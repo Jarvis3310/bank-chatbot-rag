@@ -57,12 +57,19 @@ COLLOQUIAL_CASES = [
 
 CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 CN_TENS = re.compile(r"([一二兩三四五六七八九])?十([一二三四五六七八九])?")
+CN_NUMBER = re.compile(r"(\d?)([零〇一二兩三四五六七八九十]+)(?=(\d)?)")
+
+
+def _cn_number(m: re.Match) -> str:
+    run = CN_TENS.sub(lambda t: str(CN_DIGITS.get(t[1], 1) * 10 + CN_DIGITS.get(t[2], 0)), m[2])
+    run = "".join(str(CN_DIGITS[c]) if c in CN_DIGITS else c for c in run)
+    # 緊鄰原本的阿拉伯數字時隔一格，「週五9:00」不會變成 59:00
+    return m[1] + (" " if m[1] else "") + run + (" " if m[3] else "")
 
 
 def cn_to_arabic(text: str) -> str:
     """中文數字換成阿拉伯數字：「十五」→15、「二十」→20、「五」→5、「一〇五」→105（只處理到十位）。"""
-    text = CN_TENS.sub(lambda m: str(CN_DIGITS.get(m[1], 1) * 10 + CN_DIGITS.get(m[2], 0)), text)
-    return re.sub("[零〇一二兩三四五六七八九]", lambda m: str(CN_DIGITS[m[0]]), text)
+    return CN_NUMBER.sub(_cn_number, text)
 
 
 def contains_keyword(text: str, keyword: str) -> bool:
