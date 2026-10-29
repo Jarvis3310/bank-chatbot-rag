@@ -36,6 +36,16 @@ class FakeEmbedder:
         return [v / norm for v in vec]
 
 
+class FakeClock:
+    """注入 RAG 的時間來源，測試直接改 now，不用真的等冷卻時間。"""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
 class BreakableEmbedder(FakeEmbedder):
     """建庫時正常；之後把 broken 設成 "error" 會報錯、"slow" 會卡 5 秒。"""
 

@@ -240,6 +240,10 @@ class RAG:
         self.clock = clock
         self.strict = strict
         self.vector_failed_at: float | None = None  # 上次向量檢索失敗的時間
+        self.build_failed_at: float | None = None  # 上次建庫／增量更新失敗的時間，冷卻後重試
+        self.has_vectors = False  # 向量庫一個向量都沒有時，檢索改走退回模式
+        self.rebuilding: threading.Thread | None = None  # 背景補建向量的執行緒
+        self.store_lock = threading.Lock()  # 背景補建和查詢不能同時操作 Qdrant 本機模式
         self.vector_ready = False  # 沒 key 或向量庫打不開時，整段執行期間都用退回模式
         if mode == HYBRID:
             try:
@@ -258,32 +262,34 @@ class RAG:
         """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。"""
         store = getattr(self, "store", None)  # 退回模式下可能沒建出向量庫
         if store is not None:
-            store.close()
+            with self.store_lock:
+                store.close()
 
     def _build_vectors(self) -> None:
         """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落。
 
         重算失敗（含逾時、沒網路）不阻擋啟動：沒變的段落沿用舊向量，
-        沒重算到的段落從向量庫移除，只靠 BM25 檢索，下次啟動再重算。
+        沒重算到的段落從向量庫移除，只靠 BM25 檢索，冷卻 COOLDOWN 秒後由下一題重試。
         """
         stored: dict[str, tuple[str, str]] = {}  # point id → (key, hash)
-        if self.store.collection_exists(COLLECTION):
-            offset = None
-            while True:
-                points, offset = self.store.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
-                stored.update({str(p.id): (p.payload["key"], p.payload.get("hash", "")) for p in points})
-                if offset is None:
-                    break
-
         current = {point_id(c): (i, c) for i, c in enumerate(self.chunks)}
+        with self.store_lock:
+            if self.store.collection_exists(COLLECTION):
+                offset = None
+                while True:
+                    points, offset = self.store.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
+                    stored.update({str(p.id): (p.payload["key"], p.payload.get("hash", "")) for p in points})
+                    if offset is None:
+                        break
+            # 沒變的段落只更新段落編號（知識庫增刪段落後編號會位移）
+            for pid, (i, c) in current.items():
+                if pid in stored and stored[pid][1] == chunk_hash(c):
+                    self.store.set_payload(COLLECTION, payload={"index": i}, points=[pid])
+
         stale = [pid for pid in stored if pid not in current]
         todo = [(pid, i, c) for pid, (i, c) in current.items() if stored.get(pid, ("", ""))[1] != chunk_hash(c)]
-        # 沒變的段落只更新段落編號（知識庫增刪段落後編號會位移）
-        for pid, (i, c) in current.items():
-            if pid in stored and stored[pid][1] == chunk_hash(c):
-                self.store.set_payload(COLLECTION, payload={"index": i}, points=[pid])
-
-        if todo:
+        vectors: list[list[float]] = []
+        if todo:  # 算 embedding 時不鎖向量庫，補建期間其他問題照常查詢
             try:
                 vectors = self.embedder.embed([c.embed_text for _, _, c in todo])
             except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
@@ -291,7 +297,12 @@ class RAG:
                     raise  # eval 不能默默退回 BM25
                 print(f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：{e}")
                 stale += [pid for pid, _, _ in todo if pid in stored]
+                self.build_failed_at = self.clock()
             else:
+                self.build_failed_at = None
+
+        with self.store_lock:
+            if vectors:
                 if not self.store.collection_exists(COLLECTION):
                     self.store.create_collection(COLLECTION, vectors_config=VectorParams(size=len(vectors[0]), distance=Distance.COSINE))
                 self.store.upsert(
@@ -301,8 +312,25 @@ class RAG:
                         for (pid, i, c), v in zip(todo, vectors)
                     ],
                 )
-        if stale:
-            self.store.delete(COLLECTION, points_selector=stale)
+            if stale:
+                self.store.delete(COLLECTION, points_selector=stale)
+            self.has_vectors = self.store.collection_exists(COLLECTION) and self.store.count(COLLECTION).count > 0
+
+    def _rebuild_in_background(self) -> None:
+        """冷卻時間到就在背景補建向量（同一時間最多一個），這一題不等它，照當下的向量庫回答。"""
+        if self.rebuilding is not None and self.rebuilding.is_alive():
+            return
+        self.build_failed_at = None  # 補建中不再觸發；失敗時 _build_vectors 會重新記下時間
+
+        def run() -> None:
+            try:
+                self._build_vectors()
+            except Exception as e:  # noqa: BLE001 — 背景補建的錯誤不能影響服務
+                print("背景補建向量失敗：", repr(e))
+                self.build_failed_at = self.clock()
+
+        self.rebuilding = threading.Thread(target=run, daemon=True)
+        self.rebuilding.start()
 
     def _bm25(self, query: str, min_score: float | None = None) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 分數），分數高的在前。"""
@@ -332,10 +360,9 @@ class RAG:
 
     def _vector(self, query: str) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 相似度），相似度高的在前。"""
-        if not self.store.collection_exists(COLLECTION):
-            return []  # 第一次啟動就重算失敗，向量庫還是空的
         vec = self._embed_query(query)
-        points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
+        with self.store_lock:
+            points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
         return [(p.payload["index"], p.score) for p in points if p.score >= self.min_similarity]
 
     def _hybrid(self, query: str) -> list[Hit]:
@@ -359,6 +386,16 @@ class RAG:
                 return self._fallback_hits(query)
             # 失敗後冷卻一段時間不再試，避免斷網時每題都多等 QUERY_TIMEOUT 秒
             if self.vector_failed_at is not None and self.clock() - self.vector_failed_at < COOLDOWN:
+                return self._fallback_hits(query)
+            # 建庫或增量更新失敗過：冷卻時間到就重試，成功後下一題就回到混合檢索。
+            # strict（eval）維持同步重試、失敗就報錯；平常在背景補建，不讓這一題等
+            if self.build_failed_at is not None and self.clock() - self.build_failed_at >= COOLDOWN:
+                if self.strict:
+                    self._build_vectors()
+                else:
+                    self._rebuild_in_background()
+            # 向量庫全空（例如第一次啟動就斷網）時，比照 embedding 失敗改走退回模式
+            if not self.has_vectors:
                 return self._fallback_hits(query)
             try:
                 hits = self._hybrid(query)

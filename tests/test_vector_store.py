@@ -1,8 +1,10 @@
 """向量庫增量更新：重啟時只重算有變的段落，重算失敗不阻擋啟動。"""
 import shutil
+import threading
+import time
 from pathlib import Path
 
-from conftest import KB, FakeEmbedder
+from conftest import KB, FakeClock, FakeEmbedder
 from rag import RAG
 
 
@@ -93,11 +95,62 @@ def test_重算失敗仍能啟動且沒重算的段落可用BM25檢索(tmp_path:
     assert unchanged[0].chunk.section == "跨行轉帳手續費" and unchanged[0].similarity > 0.9
 
 
-def test_第一次啟動就重算失敗仍能用BM25檢索(tmp_path: Path) -> None:
+def test_第一次啟動就重算失敗時向量庫全空_改用退回模式(tmp_path: Path) -> None:
+    # 「不見」要靠同義詞表才對得到「遺失」；純 BM25 的第一名會是「轉錯帳怎麼辦」
     embedder = BrokenAtStartup({})
     rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors")
-    embedder.broken = False
-    hits = rag.retrieve("ATM 轉帳每日上限多少")
+    hits = rag.retrieve("信用卡不見了怎麼辦？")
     rag.close()
 
-    assert hits[0].chunk.section == "轉帳限額" and hits[0].similarity is None
+    assert hits[0].chunk.section == "信用卡遺失或被盜刷"
+    assert all(h.similarity is None for h in hits)
+
+
+class GatedAfterStartup(BrokenAtStartup):
+    """啟動時報錯；恢復後，建庫（一次送多段）會卡到 gate 打開為止，模擬網路很慢。"""
+
+    def __init__(self, rules: dict[str, int]):
+        super().__init__(rules)
+        self.gate = threading.Event()
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not self.broken and len(texts) > 1:
+            self.gate.wait(10)
+        return super().embed(texts)
+
+
+def wait_for_similarity(rag: RAG, query: str, timeout: float = 5.0) -> list:
+    """背景補建完成前一直是退回模式，輪詢到出現向量相似度為止。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        hits = rag.retrieve(query)
+        if hits and hits[0].similarity is not None:
+            return hits
+        time.sleep(0.05)
+    raise AssertionError("背景補建沒有完成")
+
+
+def test_建庫失敗後冷卻時間到_背景補建期間發問立刻用退回模式_補建完成回到混合檢索(tmp_path: Path) -> None:
+    embedder, clock = GatedAfterStartup({"跨行轉帳手續費": 0, "ATM 跨行": 0}), FakeClock()
+    rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors", clock=clock)
+    embedder.broken = False
+    try:
+        clock.now += 59
+        rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+        assert embedder.calls == []  # 冷卻中不重試
+
+        clock.now += 1.5
+        t0 = time.monotonic()
+        hits = rag.retrieve("信用卡不見了怎麼辦？")  # 觸發背景補建，補建卡在 gate
+        rag.retrieve("信用卡不見了怎麼辦？")  # 補建中再問一題，不會再開一次補建
+        assert time.monotonic() - t0 < 1.0
+        assert hits[0].chunk.section == "信用卡遺失或被盜刷" and hits[0].similarity is None
+
+        embedder.gate.set()
+        hits = wait_for_similarity(rag, "用 ATM 跨行轉帳要多少手續費")
+        assert hits[0].chunk.section == "跨行轉帳手續費" and hits[0].similarity > 0.9
+        chunk_texts = {c.embed_text for c in rag.chunks}
+        assert sum(c in chunk_texts for c in embedder.calls) == len(rag.chunks)  # 只補建一次
+    finally:
+        embedder.gate.set()
+        rag.close()
