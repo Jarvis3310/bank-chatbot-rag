@@ -114,22 +114,31 @@ class VectorIndex:
         return [(p.payload["index"], p.score) for p in points if p.score >= MIN_SIMILARITY]
 
     def _sync(self) -> None:
-        """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落。
+        """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落；embedding 模型換了就整庫重算。
 
         重算失敗不丟例外：沒變的段落沿用舊向量，沒重算到的段落從向量庫移除，冷卻 COOLDOWN 秒後由下一題重試。
         """
         current = [Point(point_id(c), i, c, chunk_hash(c)) for i, c in enumerate(self.chunks)]
+        model = self.embedder.model
         stored: dict[str, str] = {}  # point id → hash
         with self.lock:
             if self.closed:
                 return
             if self.store.collection_exists(COLLECTION):
+                models: set[str | None] = set()
                 offset = None
                 while True:
                     points, offset = self.store.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
                     stored.update({str(p.id): p.payload.get("hash", "") for p in points})
+                    models.update(p.payload.get("model") for p in points)
                     if offset is None:
                         break
+                # 換了 embedding 模型（或舊版沒記模型）：舊向量的維度、語意都對不上，整庫重算
+                if models - {model}:
+                    # 先刪光 point：Windows 上本機模式刪不掉還開著的資料檔，重建同名 collection 會讀回舊 point
+                    self.store.delete(COLLECTION, points_selector=list(stored))
+                    self.store.delete_collection(COLLECTION)
+                    stored = {}
             # 沒變的段落只更新段落編號（知識庫增刪段落後編號會位移）
             for pt in current:
                 if stored.get(pt.id) == pt.hash:
@@ -160,7 +169,7 @@ class VectorIndex:
                 self.store.upsert(
                     COLLECTION,
                     points=[
-                        PointStruct(id=pt.id, vector=v, payload={"index": pt.index, "key": pt.chunk.key, "hash": pt.hash})
+                        PointStruct(id=pt.id, vector=v, payload={"index": pt.index, "key": pt.chunk.key, "hash": pt.hash, "model": model})
                         for pt, v in zip(todo, vectors)
                     ],
                 )

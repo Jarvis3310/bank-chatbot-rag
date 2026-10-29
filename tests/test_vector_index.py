@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
+from qdrant_client import QdrantClient
 
 import vector_index
 
@@ -40,6 +41,44 @@ def test_重開時只重算內容有變的段落(tmp_path: Path) -> None:
     VectorIndex(edited, embedder, tmp_path).close()
 
     assert embedder.calls == [edited[0].embed_text]
+
+
+def test_換embedding模型時整庫重算_不混用不同維度(tmp_path: Path) -> None:
+    VectorIndex(CHUNKS, FakeEmbedder(FEE_RULES, model="舊模型"), tmp_path).close()
+
+    embedder = FakeEmbedder(FEE_RULES, model="新模型", dim=48)
+    index = VectorIndex(CHUNKS, embedder, tmp_path)
+    hits = index.search(FEE_Q)
+    index.close()
+
+    assert sorted(embedder.calls[:-1]) == sorted(c.embed_text for c in CHUNKS)  # 最後一筆是問題
+    assert section_of(hits) == "跨行轉帳手續費" and hits[0][1] > 0.9
+
+
+def test_換模型重算後再重開不再重算(tmp_path: Path) -> None:
+    VectorIndex(CHUNKS, FakeEmbedder(FEE_RULES, model="舊模型"), tmp_path).close()
+    VectorIndex(CHUNKS, FakeEmbedder(FEE_RULES, model="新模型", dim=48), tmp_path).close()
+
+    embedder = FakeEmbedder(FEE_RULES, model="新模型", dim=48)
+    index = VectorIndex(CHUNKS, embedder, tmp_path)
+    hits = index.search(FEE_Q)
+    index.close()
+
+    assert embedder.calls == [FEE_Q]
+    assert section_of(hits) == "跨行轉帳手續費" and hits[0][1] > 0.9
+
+
+def test_舊版沒記模型的向量庫整庫重算(tmp_path: Path) -> None:
+    VectorIndex(CHUNKS, FakeEmbedder({}), tmp_path).close()
+    store = QdrantClient(path=str(tmp_path))  # 模擬升級前建的向量庫：payload 沒有 model
+    points, _ = store.scroll(vector_index.COLLECTION, limit=len(CHUNKS), with_payload=True)
+    store.delete_payload(vector_index.COLLECTION, keys=["model"], points=[p.id for p in points])
+    store.close()
+
+    embedder = FakeEmbedder({})
+    VectorIndex(CHUNKS, embedder, tmp_path).close()
+
+    assert len(embedder.calls) == len(CHUNKS)
 
 
 def test_知識庫拿掉的段落從向量庫移除(tmp_path: Path) -> None:

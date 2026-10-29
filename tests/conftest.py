@@ -19,8 +19,10 @@ class FakeEmbedder:
     含同一組關鍵字的文字相似度接近 1，其他文字之間接近 0。
     """
 
-    def __init__(self, rules: dict[str, int]):
+    def __init__(self, rules: dict[str, int], model: str = "fake", dim: int = DIM):
         self.rules = rules
+        self.model = model
+        self.dim = dim
         self.calls: list[str] = []
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -29,7 +31,7 @@ class FakeEmbedder:
 
     def _vector(self, text: str) -> list[float]:
         rnd = random.Random(hashlib.sha256(text.encode()).digest())
-        vec = [rnd.gauss(0, 0.05) for _ in range(DIM)]
+        vec = [rnd.gauss(0, 0.05) for _ in range(self.dim)]
         for keyword, dim in self.rules.items():
             if keyword in text:
                 vec[dim] += 1.0
