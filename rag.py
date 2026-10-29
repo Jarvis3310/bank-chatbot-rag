@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 import uuid
@@ -196,6 +197,16 @@ RRF_K = 60  # RRF 的常數，常用值
 COLLECTION = "chunks"
 
 
+def point_id(chunk: Chunk) -> str:
+    """向量庫的 point id，由「來源檔＋章節標題」決定；章節改名就是另一段。"""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk.key))
+
+
+def chunk_hash(chunk: Chunk) -> str:
+    """拿去 embedding 的整段文字的指紋，內容一改就變。"""
+    return hashlib.sha256(chunk.embed_text.encode("utf-8")).hexdigest()
+
+
 class RAG:
     def __init__(
         self,
@@ -222,19 +233,52 @@ class RAG:
             self.store = QdrantClient(path=str(vector_dir or Path(kb_dir).parent / "vector_store"))
             self._build_vectors()
 
+    def close(self) -> None:
+        """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。"""
+        if self.mode == HYBRID:
+            self.store.close()
+
     def _build_vectors(self) -> None:
-        """每次啟動全部重算（增量更新另一張 ticket 做）。"""
-        vectors = self.embedder.embed([c.embed_text for c in self.chunks])
+        """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落。
+
+        重算失敗（含逾時、沒網路）不阻擋啟動：沒變的段落沿用舊向量，
+        沒重算到的段落從向量庫移除，只靠 BM25 檢索，下次啟動再重算。
+        """
+        stored: dict[str, tuple[str, str]] = {}  # point id → (key, hash)
         if self.store.collection_exists(COLLECTION):
-            self.store.delete_collection(COLLECTION)
-        self.store.create_collection(COLLECTION, vectors_config=VectorParams(size=len(vectors[0]), distance=Distance.COSINE))
-        self.store.upsert(
-            COLLECTION,
-            points=[
-                PointStruct(id=str(uuid.uuid5(uuid.NAMESPACE_URL, c.key)), vector=v, payload={"index": i, "key": c.key})
-                for i, (c, v) in enumerate(zip(self.chunks, vectors))
-            ],
-        )
+            offset = None
+            while True:
+                points, offset = self.store.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
+                stored.update({str(p.id): (p.payload["key"], p.payload.get("hash", "")) for p in points})
+                if offset is None:
+                    break
+
+        current = {point_id(c): (i, c) for i, c in enumerate(self.chunks)}
+        stale = [pid for pid in stored if pid not in current]
+        todo = [(pid, i, c) for pid, (i, c) in current.items() if stored.get(pid, ("", ""))[1] != chunk_hash(c)]
+        # 沒變的段落只更新段落編號（知識庫增刪段落後編號會位移）
+        for pid, (i, c) in current.items():
+            if pid in stored and stored[pid][1] == chunk_hash(c):
+                self.store.set_payload(COLLECTION, payload={"index": i}, points=[pid])
+
+        if todo:
+            try:
+                vectors = self.embedder.embed([c.embed_text for _, _, c in todo])
+            except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
+                print(f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：{e}")
+                stale += [pid for pid, _, _ in todo if pid in stored]
+            else:
+                if not self.store.collection_exists(COLLECTION):
+                    self.store.create_collection(COLLECTION, vectors_config=VectorParams(size=len(vectors[0]), distance=Distance.COSINE))
+                self.store.upsert(
+                    COLLECTION,
+                    points=[
+                        PointStruct(id=pid, vector=v, payload={"index": i, "key": c.key, "hash": chunk_hash(c)})
+                        for (pid, i, c), v in zip(todo, vectors)
+                    ],
+                )
+        if stale:
+            self.store.delete(COLLECTION, points_selector=stale)
 
     def _bm25(self, query: str) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 分數），分數高的在前。"""
@@ -244,7 +288,9 @@ class RAG:
 
     def _vector(self, query: str) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 相似度），相似度高的在前。"""
-        vec = self.embedder.embed([query])[0]
+        if not self.store.collection_exists(COLLECTION):
+            return []  # 第一次啟動就重算失敗，向量庫還是空的
+        vec =self.embedder.embed([query])[0]
         points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
         return [(p.payload["index"], p.score) for p in points if p.score >= self.min_similarity]
 

@@ -1,0 +1,103 @@
+"""向量庫增量更新：重啟時只重算有變的段落，重算失敗不阻擋啟動。"""
+import shutil
+from pathlib import Path
+
+from rag import RAG
+from test_hybrid import KB, FakeEmbedder
+
+
+def copy_kb(tmp_path: Path) -> Path:
+    """複製一份知識庫到暫存資料夾，測試才能改內容。"""
+    kb = tmp_path / "kb"
+    shutil.copytree(KB, kb)
+    return kb
+
+
+def test_知識庫不變時重啟不重算任何段落(tmp_path: Path) -> None:
+    kb, store = copy_kb(tmp_path), tmp_path / "vectors"
+    RAG(kb, embedder=FakeEmbedder({}), vector_dir=store).close()
+
+    embedder = FakeEmbedder({})
+    RAG(kb, embedder=embedder, vector_dir=store).close()
+
+    assert embedder.calls == []
+
+
+def edit_kb(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    assert old in text
+    path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+def test_改一段後重建只重算那一段(tmp_path: Path) -> None:
+    kb, store = copy_kb(tmp_path), tmp_path / "vectors"
+    RAG(kb, embedder=FakeEmbedder({}), vector_dir=store).close()
+    edit_kb(kb / "02_transfer_fees.md", "ATM 轉帳（非約定）：每日上限 3 萬元。", "ATM 轉帳（非約定）：每日上限 5 萬元。")
+
+    embedder = FakeEmbedder({})
+    RAG(kb, embedder=embedder, vector_dir=store).close()
+
+    assert len(embedder.calls) == 1
+    assert embedder.calls[0].startswith("轉帳、提款與手續費 轉帳限額")
+    assert "ATM 轉帳（非約定）：每日上限 5 萬元。" in embedder.calls[0]
+
+
+def test_刪一段後重建該段檢索不到(tmp_path: Path) -> None:
+    kb, store = copy_kb(tmp_path), tmp_path / "vectors"
+    rules = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
+    RAG(kb, embedder=FakeEmbedder(rules), vector_dir=store).close()
+    path = kb / "02_transfer_fees.md"
+    text = path.read_text(encoding="utf-8")
+    start = text.index("## 跨行轉帳手續費")
+    end = text.index("\n## ", start + 1)
+    path.write_text(text[:start] + text[end + 1 :], encoding="utf-8")
+
+    rag = RAG(kb, embedder=FakeEmbedder(rules), vector_dir=store)
+    hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    rag.close()
+
+    assert "跨行轉帳手續費" not in [h.chunk.section for h in hits]
+    # 只有被刪的那段含假 embedding 的關鍵字；它的舊向量若還在，會冒充成別段出現
+    assert all(h.similarity is None or h.similarity < 0.9 for h in hits)
+
+
+class BrokenAtStartup(FakeEmbedder):
+    """啟動重算時報錯（模擬沒網路），之後恢復正常。"""
+
+    def __init__(self, rules: dict[str, int]):
+        super().__init__(rules)
+        self.broken = True
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if self.broken:
+            raise ConnectionError("沒網路")
+        return super().embed(texts)
+
+
+def test_重算失敗仍能啟動且沒重算的段落可用BM25檢索(tmp_path: Path) -> None:
+    kb, store = copy_kb(tmp_path), tmp_path / "vectors"
+    rules = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
+    RAG(kb, embedder=FakeEmbedder(rules), vector_dir=store).close()
+    edit_kb(kb / "02_transfer_fees.md", "ATM 轉帳（非約定）：每日上限 3 萬元。", "ATM 轉帳（非約定）：每日上限 5 萬元。")
+
+    embedder = BrokenAtStartup(rules)
+    rag = RAG(kb, embedder=embedder, vector_dir=store)
+    embedder.broken = False
+    changed = rag.retrieve("ATM 轉帳每日上限多少")
+    unchanged = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    rag.close()
+
+    hit = next(h for h in changed if h.chunk.section == "轉帳限額")
+    assert hit.bm25 is not None and hit.similarity is None
+    # 沒變的段落沿用舊向量
+    assert unchanged[0].chunk.section == "跨行轉帳手續費" and unchanged[0].similarity > 0.9
+
+
+def test_第一次啟動就重算失敗仍能用BM25檢索(tmp_path: Path) -> None:
+    embedder = BrokenAtStartup({})
+    rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors")
+    embedder.broken = False
+    hits = rag.retrieve("ATM 轉帳每日上限多少")
+    rag.close()
+
+    assert hits[0].chunk.section == "轉帳限額" and hits[0].similarity is None
