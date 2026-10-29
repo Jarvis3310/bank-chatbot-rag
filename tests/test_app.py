@@ -20,3 +20,4 @@ def test_embedding失敗時網頁聊天API仍回200和答案(tmp_path: Path, mon
     body = r.get_json()
     assert body["answer"]
     assert "營業時間" in body["retrieved"][0]["label"]
+    assert "bm25" in body["retrieved"][0] and "similarity" not in body["retrieved"][0]  # 退回模式沒有相似度

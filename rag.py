@@ -171,6 +171,15 @@ class Hit:
     similarity: float | None = None  # 向量相似度（cosine）
     bm25: float | None = None  # BM25 分數
 
+    def to_dict(self) -> dict:
+        """網頁聊天顯示用；沒被某一邊找到就不帶那一邊的分數。"""
+        out = {"label": self.chunk.label, "text": self.chunk.text}
+        if self.similarity is not None:
+            out["similarity"] = round(self.similarity, 2)
+        if self.bm25 is not None:
+            out["bm25"] = round(self.bm25, 1)
+        return out
+
 
 @dataclass
 class Answer:
