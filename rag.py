@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import math
 import re
+import threading
+import time
 import uuid
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -192,6 +195,9 @@ MIN_SCORES = {HYBRID: 8.0, FALLBACK: 8.0, BM25_ONLY: 8.0}
 # 混合檢索的向量相似度門檻。初始值，待用 eval 調整（範圍外 2 題不撞到段落）
 MIN_SIMILARITY = 0.40
 
+QUERY_TIMEOUT = 3.0  # 問題的 embedding 超過幾秒就切到退回模式
+COOLDOWN = 60.0  # 向量檢索失敗後幾秒內不再試
+
 RRF_K = 60  # RRF 的常數，常用值
 COLLECTION = "chunks"
 
@@ -206,6 +212,8 @@ class RAG:
         min_similarity: float = MIN_SIMILARITY,
         embedder: Embedder | None = None,
         vector_dir: str | Path | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        strict: bool = False,  # True：向量檢索用不了就丟例外、不退回（eval 用）
     ):
         if mode not in MODES:
             raise ValueError(f"不支援的檢索模式：{mode}")
@@ -216,11 +224,22 @@ class RAG:
         self.top_k = top_k
         self.min_score = MIN_SCORES[mode] if min_score is None else min_score
         self.min_similarity = min_similarity
+        self.clock = clock
+        self.strict = strict
+        self.vector_failed_at: float | None = None  # 上次向量檢索失敗的時間
+        self.vector_ready = False  # 沒 key 或向量庫打不開時，整段執行期間都用退回模式
         if mode == HYBRID:
-            self.embedder = embedder or OpenAIEmbedder()
-            # 向量庫資料夾預設放在知識庫旁邊，不進版控
-            self.store = QdrantClient(path=str(vector_dir or Path(kb_dir).parent / "vector_store"))
-            self._build_vectors()
+            try:
+                self.embedder = embedder or OpenAIEmbedder()
+                # 向量庫資料夾預設放在知識庫旁邊，不進版控
+                self.store = QdrantClient(path=str(vector_dir or Path(kb_dir).parent / "vector_store"))
+            except Exception as e:
+                if strict:
+                    raise
+                print("向量檢索用不了，改用退回模式：", repr(e))
+            else:
+                self.vector_ready = True
+                self._build_vectors()
 
     def _build_vectors(self) -> None:
         """每次啟動全部重算（增量更新另一張 ticket 做）。"""
@@ -236,15 +255,35 @@ class RAG:
             ],
         )
 
-    def _bm25(self, query: str) -> list[tuple[int, float]]:
+    def _bm25(self, query: str, min_score: float | None = None) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 分數），分數高的在前。"""
+        min_score = self.min_score if min_score is None else min_score
         scores = self.index.scores(tokenize(query))
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        return [(i, s) for i, s in ranked if s >= self.min_score]
+        return [(i, s) for i, s in ranked if s >= min_score]
+
+    def _embed_query(self, query: str) -> list[float]:
+        """問題的 embedding，超過 QUERY_TIMEOUT 秒就放棄（卡住的請求留在背景執行緒自己結束）。"""
+        result: dict = {}
+
+        def run() -> None:
+            try:
+                result["vec"] = self.embedder.embed([query])[0]
+            except Exception as e:
+                result["error"] = e
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(QUERY_TIMEOUT)
+        if worker.is_alive():
+            raise TimeoutError(f"embedding 超過 {QUERY_TIMEOUT:g} 秒")
+        if "error" in result:
+            raise result["error"]
+        return result["vec"]
 
     def _vector(self, query: str) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 相似度），相似度高的在前。"""
-        vec = self.embedder.embed([query])[0]
+        vec = self._embed_query(query)
         points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
         return [(p.payload["index"], p.score) for p in points if p.score >= self.min_similarity]
 
@@ -258,11 +297,30 @@ class RAG:
         top = sorted(rrf, key=rrf.get, reverse=True)[: self.top_k]
         return [Hit(self.chunks[i], similarity=sims.get(i), bm25=bm25s.get(i)) for i in top]
 
+    def _fallback_hits(self, query: str) -> list[Hit]:
+        """退回模式：BM25＋同義詞，門檻用退回模式自己的值。"""
+        ranked = self._bm25(expand_query(query), MIN_SCORES[FALLBACK])
+        return [Hit(self.chunks[i], bm25=s) for i, s in ranked[: self.top_k]]
+
     def retrieve(self, query: str) -> list[Hit]:
         if self.mode == HYBRID:
-            return self._hybrid(query)
+            if not self.vector_ready:
+                return self._fallback_hits(query)
+            # 失敗後冷卻一段時間不再試，避免斷網時每題都多等 QUERY_TIMEOUT 秒
+            if self.vector_failed_at is not None and self.clock() - self.vector_failed_at < COOLDOWN:
+                return self._fallback_hits(query)
+            try:
+                hits = self._hybrid(query)
+            except Exception as e:  # 向量檢索失敗（API 錯誤、逾時）不讓客戶看到錯誤
+                if self.strict:
+                    raise
+                print("向量檢索失敗，改用退回模式：", repr(e))
+                self.vector_failed_at = self.clock()
+                return self._fallback_hits(query)
+            self.vector_failed_at = None
+            return hits
         if self.mode == FALLBACK:
-            query = expand_query(query)
+            return self._fallback_hits(query)
         return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[: self.top_k]]
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
