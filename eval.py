@@ -56,7 +56,8 @@ COLLOQUIAL_CASES = [
 
 
 def contains_keyword(text: str, keyword: str) -> bool:
-    """答案是否含關鍵字。數字開頭／結尾的關鍵字，前後不能再接數字或千分位逗號（「5 元」不算配到「15 元」）。"""
+    """答案是否含關鍵字。空白不計（「5 元」配得到「5元」）；數字開頭／結尾的關鍵字，前後不能再接數字或千分位逗號（「5 元」不算配到「15 元」）。"""
+    text, keyword = re.sub(r"\s+", "", text), re.sub(r"\s+", "", keyword)
     pattern = re.escape(keyword)
     if keyword[:1].isdigit():
         pattern = r"(?<!\d)(?<!\d[,.])" + pattern

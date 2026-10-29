@@ -10,6 +10,16 @@ def test_數字關鍵字配得到單獨的數字(text: str) -> None:
     assert contains_keyword(text, "5 元")
 
 
+@pytest.mark.parametrize(("text", "keyword"), [("手續費5元", "5 元"), ("每次 5  元", "5 元"), ("手續費 5 元", "5元")])
+def test_關鍵字比對不計空白(text: str, keyword: str) -> None:
+    assert contains_keyword(text, keyword)
+
+
+@pytest.mark.parametrize(("text", "keyword"), [("手續費15元", "5 元"), ("年費1,300元", "300 元"), ("手續費 15元", "5元")])
+def test_不計空白時數字邊界照舊(text: str, keyword: str) -> None:
+    assert not contains_keyword(text, keyword)
+
+
 @pytest.mark.parametrize(
     ("text", "keyword"),
     [("手續費 15 元", "5 元"), ("年費 1,300 元", "300 元"), ("年費 2300 元", "300 元")],
