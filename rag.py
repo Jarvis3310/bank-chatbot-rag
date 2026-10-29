@@ -172,7 +172,7 @@ class Hit:
     bm25: float | None = None  # BM25 分數
 
     def to_dict(self) -> dict:
-        """網頁聊天顯示用；沒被某一邊找到就不帶那一邊的分數。"""
+        """網頁聊天顯示用的格式。"""
         out = {"label": self.chunk.label, "text": self.chunk.text}
         if self.similarity is not None:
             out["similarity"] = round(self.similarity, 2)
@@ -194,8 +194,7 @@ class Mode(Enum):
     BM25_ONLY = "bm25"  # 純 BM25：eval 對照組
 
 
-# BM25 門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。三種模式共用，eval 證明需要時再分開。
-# 用純 BM25 的 eval 調出：範圍外最高 5.6、範圍內應命中段落最低 10.6，取中間
+# BM25 門檻，範圍外的問題就會得到空結果。純 BM25 eval：範圍外最高 5.6、應命中段落最低 10.6，取中間。三種模式共用
 MIN_SCORE = 8.0
 
 TOP_K = 4  # 檢索回傳幾段
@@ -254,7 +253,7 @@ class RAG:
     def retrieve(self, query: str) -> list[Hit]:
         if self.mode is Mode.BM25_ONLY:
             return self._bm25_hits(query)
-        # 退回模式沒有向量索引；混合檢索的向量檢索用不了（失敗、冷卻中、向量庫全空）時也走退回模式
+        # 退回模式沒有向量索引；混合檢索的向量檢索用不了時也走退回模式
         sims = self.vectors.search(query) if self.vectors is not None else None
         if sims is None:
             return self._bm25_hits(expand_query(query))
@@ -262,8 +261,7 @@ class RAG:
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
         history = history or []
-        # 只有看起來像追問（例如「那手續費呢？」）時，才連同上一題一起檢索；
-        # 否則新問題會被上一題的主題帶偏（例如問天氣卻撈到房貸資料）
+        # 只有追問才連同上一題一起檢索，否則新問題會被上一題的主題帶偏
         query = f"{history[-1][0]} {question}" if history and is_followup(question) else question
         hits = self.retrieve(query)
 
