@@ -1,10 +1,9 @@
 """向量庫增量更新：重啟時只重算有變的段落，重算失敗不阻擋啟動。"""
 import shutil
-import threading
 import time
 from pathlib import Path
 
-from conftest import KB, FakeClock, FakeEmbedder
+from conftest import KB, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup
 from rag import RAG
 
 
@@ -63,19 +62,6 @@ def test_刪一段後重建該段檢索不到(tmp_path: Path) -> None:
     assert all(h.similarity is None or h.similarity < 0.9 for h in hits)
 
 
-class BrokenAtStartup(FakeEmbedder):
-    """啟動重算時報錯（模擬沒網路），之後恢復正常。"""
-
-    def __init__(self, rules: dict[str, int]):
-        super().__init__(rules)
-        self.broken = True
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        if self.broken:
-            raise ConnectionError("沒網路")
-        return super().embed(texts)
-
-
 def test_重算失敗仍能啟動且沒重算的段落可用BM25檢索(tmp_path: Path) -> None:
     kb, store = copy_kb(tmp_path), tmp_path / "vectors"
     rules = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
@@ -104,19 +90,6 @@ def test_第一次啟動就重算失敗時向量庫全空_改用退回模式(tmp
 
     assert hits[0].chunk.section == "信用卡遺失或被盜刷"
     assert all(h.similarity is None for h in hits)
-
-
-class GatedAfterStartup(BrokenAtStartup):
-    """啟動時報錯；恢復後，建庫（一次送多段）會卡到 gate 打開為止，模擬網路很慢。"""
-
-    def __init__(self, rules: dict[str, int]):
-        super().__init__(rules)
-        self.gate = threading.Event()
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        if not self.broken and len(texts) > 1:
-            self.gate.wait(10)
-        return super().embed(texts)
 
 
 def wait_for_similarity(rag: RAG, query: str, timeout: float = 5.0) -> list:

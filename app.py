@@ -26,7 +26,7 @@ from flask import Flask, abort, jsonify, request, send_file
 load_dotenv()
 
 import llm  # noqa: E402
-from rag import RAG, Hit, format_for_line  # noqa: E402
+from rag import RAG, format_for_line  # noqa: E402
 
 BASE = Path(__file__).parent
 app = Flask(__name__)
@@ -112,16 +112,6 @@ def callback():
 
 
 # ---------- 網頁聊天 ----------
-def hit_json(h: Hit) -> dict:
-    """沒被某一邊找到的段落，就不帶那一邊的分數。"""
-    out = {"label": h.chunk.label, "text": h.chunk.text}
-    if h.similarity is not None:
-        out["similarity"] = round(h.similarity, 2)
-    if h.bm25 is not None:
-        out["bm25"] = round(h.bm25, 1)
-    return out
-
-
 @app.post("/api/chat")
 def api_chat():
     data = request.get_json(force=True)
@@ -131,7 +121,7 @@ def api_chat():
     return jsonify(
         answer=ans.text,
         sources=[c.label for c in ans.sources],
-        retrieved=[hit_json(h) for h in ans.retrieved],
+        retrieved=[h.to_dict() for h in ans.retrieved],
         seconds=round(secs, 2),
         provider=llm.provider(),
     )
