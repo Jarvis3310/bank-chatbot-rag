@@ -2,8 +2,8 @@
 import shutil
 from pathlib import Path
 
+from conftest import KB, FakeEmbedder
 from rag import RAG
-from test_hybrid import KB, FakeEmbedder
 
 
 def copy_kb(tmp_path: Path) -> Path:
