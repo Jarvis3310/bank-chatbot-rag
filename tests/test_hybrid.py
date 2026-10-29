@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from conftest import KB, FakeEmbedder
-from rag import RAG
+from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, FakeEmbedder
+from rag import RAG, Mode
 
 
 def test_混合檢索回傳的段落帶兩種分數(tmp_path: Path) -> None:
@@ -35,6 +35,12 @@ def test_混合檢索的BM25也套用同義詞(tmp_path: Path) -> None:
 
     assert hits[0].chunk.section == "營業時間"
     assert hits[0].bm25 is not None
+
+
+def test_混合檢索的BM25門檻比退回模式高_字面只沾到一點的段落不收(tmp_path: Path) -> None:
+    # 「我想存日幣」靠同義詞對到「外幣帳戶開戶」，但 BM25 分數不高：退回模式收、混合檢索不收（交給向量判斷）
+    assert RAG(KB, mode=Mode.FALLBACK).retrieve(FALLBACK_Q)[0].chunk.section == FALLBACK_SECTION
+    assert RAG(KB, embedder=FakeEmbedder({}), vector_dir=tmp_path).retrieve(FALLBACK_Q) == []
 
 
 def test_混合檢索範圍外問題檢索結果為空(tmp_path: Path) -> None:

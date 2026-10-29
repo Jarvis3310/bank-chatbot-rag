@@ -29,7 +29,7 @@ def test_搜尋回傳過門檻的段落編號與相似度(tmp_path: Path) -> Non
     index.close()
 
     assert section_of(hits) == "跨行轉帳手續費" and hits[0][1] > 0.9
-    assert all(sim >= 0.4 for _, sim in hits)
+    assert all(sim >= vector_index.MIN_SIMILARITY for _, sim in hits)
 
 
 def test_重開時只重算內容有變的段落(tmp_path: Path) -> None:

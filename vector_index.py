@@ -22,8 +22,8 @@ from embedding import Embedder
 if TYPE_CHECKING:
     from rag import Chunk
 
-# 向量相似度門檻。初始值，待用 eval 調整（範圍外 2 題不撞到段落）
-MIN_SIMILARITY = 0.40
+# 向量相似度門檻。eval（large）：範圍外最高 0.312、口語題應命中段落最低 0.414，0.32–0.41 都達標，取中間偏高
+MIN_SIMILARITY = 0.37
 QUERY_TIMEOUT = 3.0  # 問題的 embedding 超過幾秒就放棄
 COOLDOWN = 60.0  # 失敗後幾秒內不再試
 CLOSE_TIMEOUT = 5.0  # close 最多等背景補建幾秒（embedding 卡住時不無限等）

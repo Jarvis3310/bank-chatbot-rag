@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from qdrant_client import QdrantClient
 
-from conftest import FALLBACK_Q, KB, BreakableEmbedder, FakeClock
+from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder, FakeClock
 from rag import RAG
 
 
@@ -16,7 +16,7 @@ def test_embedding報錯時切到退回模式不丟例外(tmp_path: Path) -> Non
 
     hits = rag.retrieve(FALLBACK_Q)
 
-    assert hits[0].chunk.section == "營業時間"
+    assert hits[0].chunk.section == FALLBACK_SECTION
     assert hits[0].similarity is None
 
 
@@ -30,7 +30,7 @@ def test_embedding卡住時3秒內切到退回模式(tmp_path: Path) -> None:
     elapsed = time.monotonic() - t0
 
     assert elapsed < 3.5
-    assert hits[0].chunk.section == "營業時間"
+    assert hits[0].chunk.section == FALLBACK_SECTION
 
 
 def test_失敗後60秒內不再試向量_過了60秒會再試(tmp_path: Path) -> None:
@@ -54,7 +54,7 @@ def test_沒有key時切到退回模式(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     rag = RAG(KB, vector_dir=tmp_path)
 
-    assert rag.retrieve(FALLBACK_Q)[0].chunk.section == "營業時間"
+    assert rag.retrieve(FALLBACK_Q)[0].chunk.section == FALLBACK_SECTION
 
 
 def test_向量庫打不開時整段都用退回模式(tmp_path: Path) -> None:
@@ -62,7 +62,7 @@ def test_向量庫打不開時整段都用退回模式(tmp_path: Path) -> None:
     embedder = BreakableEmbedder()
     try:
         rag = RAG(KB, embedder=embedder, vector_dir=tmp_path)
-        assert rag.retrieve(FALLBACK_Q)[0].chunk.section == "營業時間"
+        assert rag.retrieve(FALLBACK_Q)[0].chunk.section == FALLBACK_SECTION
         assert embedder.calls == []
     finally:
         holder.close()

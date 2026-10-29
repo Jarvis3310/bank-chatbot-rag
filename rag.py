@@ -194,8 +194,11 @@ class Mode(Enum):
     BM25_ONLY = "bm25"  # 純 BM25：eval 對照組
 
 
-# BM25 門檻，範圍外的問題就會得到空結果。純 BM25 eval：範圍外最高 5.6、應命中段落最低 10.6，取中間。三種模式共用
+# 退回模式與純 BM25 的 BM25 門檻，範圍外的問題就會得到空結果。純 BM25 eval：範圍外最高 5.6、應命中段落最低 10.6，取中間
 MIN_SCORE = 8.0
+# 混合檢索 BM25 那邊的門檻，比退回模式高：字面只沾到一點的段落交給向量判斷，不讓它在 RRF 搶到名次。
+# eval（large＋同義詞）：15–17 都達標；低於 15 簡報題的範圍外問題多撞一段，高於 17.4 有兩題正確段落掉到第二，取中間
+HYBRID_MIN_SCORE = 16.0
 
 TOP_K = 4  # 檢索回傳幾段
 RRF_K = 60  # RRF 的常數，常用值
@@ -231,15 +234,15 @@ class RAG:
         if self.vectors is not None:
             self.vectors.close()
 
-    def _bm25(self, query: str) -> list[tuple[int, float]]:
+    def _bm25(self, query: str, min_score: float = MIN_SCORE) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 分數），分數高的在前。"""
         scores = self.index.scores(tokenize(query))
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        return [(i, s) for i, s in ranked if s >= MIN_SCORE]
+        return [(i, s) for i, s in ranked if s >= min_score]
 
     def _hybrid(self, query: str, sims: dict[int, float]) -> list[Hit]:
         """兩邊各自過門檻，過其中一邊就進入 RRF 合併；排序只依兩邊的排名。BM25 這邊也套用同義詞表。"""
-        bm25s = dict(self._bm25(expand_query(query)))
+        bm25s = dict(self._bm25(expand_query(query), HYBRID_MIN_SCORE))
         rrf: dict[int, float] = {}
         for ranked in (sims, bm25s):
             for rank, i in enumerate(ranked, 1):

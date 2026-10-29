@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 import app
-from conftest import FALLBACK_Q, KB, BreakableEmbedder
+from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder
 from rag import RAG
 
 
@@ -19,5 +19,5 @@ def test_embedding失敗時網頁聊天API仍回200和答案(tmp_path: Path, mon
     assert r.status_code == 200
     body = r.get_json()
     assert body["answer"]
-    assert "營業時間" in body["retrieved"][0]["label"]
+    assert FALLBACK_SECTION in body["retrieved"][0]["label"]
     assert "bm25" in body["retrieved"][0] and "similarity" not in body["retrieved"][0]  # 退回模式沒有相似度
