@@ -1,20 +1,24 @@
 """評測：檢查「有沒有找到對的段落」，設定 LLM 後也檢查「答案有沒有關鍵數字」。
 
+檢索分數分兩欄：退回模式（BM25＋同義詞，服務實際使用）、純 BM25（不加同義詞，對照組）。
+範圍外題目以「檢索結果為空」判定通過。答案只用退回模式產生。
+
 用法：
   python eval.py            # 只測檢索，不需要 API key
   python eval.py --answer   # 也呼叫 LLM 產生答案（需在 .env 設定 LLM）
 """
 import sys
 import time
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 import llm  # noqa: E402
-from rag import RAG  # noqa: E402
+from rag import BM25_ONLY, FALLBACK, RAG  # noqa: E402
 
-# (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，應該拒答
+# (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，檢索結果應為空
 CASES = [
     ("信用卡不見了怎麼辦？", "信用卡遺失或被盜刷", "0800-123-456"),
     ("卡片被偷刷，我要負擔多少？", "信用卡遺失或被盜刷", "3,000"),
@@ -35,37 +39,58 @@ CASES = [
 ]
 
 
+# (欄位名稱, 檢索模式)；答案只用第一欄（服務實際使用的模式）產生
+COLUMNS = [("退回模式", FALLBACK), ("純 BM25", BM25_ONLY)]
+
+
+@dataclass
+class Score:
+    hit1: int = 0
+    hitk: int = 0
+    n_in: int = 0
+    out_hits: int = 0  # 範圍外題目撞到段落的題數
+    n_out: int = 0
+
+
 def main(with_answer: bool) -> None:
-    rag = RAG("kb")
+    rags = {name: RAG("kb", mode=mode) for name, mode in COLUMNS}
     if with_answer and not llm.enabled():
         sys.exit("請先在 .env 設定 LLM_PROVIDER 與 API key")
 
-    hit1 = hitk = ans_ok = n_in = 0
+    scores = {name: Score() for name in rags}
+    ans_ok = 0
     times = []
     for q, expect, keyword in CASES:
-        hits = rag.retrieve(q)
-        sections = [c.section for c, _ in hits]
-        if expect:
-            n_in += 1
-            hit1 += bool(sections) and sections[0] == expect
-            hitk += expect in sections
-            r_ok = expect in sections
-        else:
-            r_ok = True  # 範圍外題目由 LLM 判斷是否拒答
-        line = f"{'✅' if r_ok else '❌'} {q}\n   檢索：{' / '.join(sections) or '（無）'}"
+        lines = [q]
+        for name, rag in rags.items():
+            sections = [c.section for c, _ in rag.retrieve(q)]
+            s = scores[name]
+            if expect:
+                s.n_in += 1
+                s.hit1 += bool(sections) and sections[0] == expect
+                s.hitk += expect in sections
+                r_ok = expect in sections
+            else:
+                s.n_out += 1
+                s.out_hits += bool(sections)
+                r_ok = not sections  # 範圍外題目：檢索結果為空才算通過
+            lines.append(f"   {'✅' if r_ok else '❌'} {name}：{' / '.join(sections) or '（無）'}")
 
         if with_answer:
             t0 = time.time()
-            ans = rag.answer(q)
+            ans = rags[COLUMNS[0][0]].answer(q)
             times.append(time.time() - t0)
             ok = keyword in ans.text
             ans_ok += ok
-            line += f"\n   {'✅' if ok else '❌'} 答案（應含「{keyword}」，{times[-1]:.1f}s）：{ans.text[:120]}"
-        print(line)
+            lines.append(f"   {'✅' if ok else '❌'} 答案（應含「{keyword}」，{times[-1]:.1f}s）：{ans.text[:120]}")
+        print("\n".join(lines))
 
-    print(f"\n檢索第一名正確：{hit1}/{n_in}　前 {rag.top_k} 名有找到：{hitk}/{n_in}")
+    top_k = rags[COLUMNS[0][0]].top_k
+    print()
+    for name, s in scores.items():
+        print(f"【{name}】檢索第一名正確：{s.hit1}/{s.n_in}　前 {top_k} 名有找到：{s.hitk}/{s.n_in}　範圍外撞到段落：{s.out_hits}/{s.n_out}")
     if with_answer:
-        print(f"答案含關鍵字：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
+        print(f"\n答案含關鍵字（{COLUMNS[0][0]}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
 
 
 if __name__ == "__main__":
