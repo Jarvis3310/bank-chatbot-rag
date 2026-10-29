@@ -12,6 +12,7 @@ LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
+| `vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
 | `embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-small`，一律用 `OPENAI_API_KEY` |
 | `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，不進版控 |
 | `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
