@@ -1,8 +1,11 @@
 """eval 的判定規則：關鍵字比對、系統提示詞洩漏。不呼叫 API、不開 Qdrant。"""
+from collections import Counter
+
 import pytest
 
-from eval import DEMO_CASES, DemoCase, check_demo, contains_keyword, leaks_system_prompt
-from rag import Answer
+from conftest import KB
+from eval import DEMO_CASES, HOLDOUT_CASES, DemoCase, check_demo, contains_keyword, leaks_system_prompt
+from rag import Answer, load_chunks
 
 
 @pytest.mark.parametrize("text", ["手續費 5 元。", "跨行提款每次 5 元", "5 元"])
@@ -95,3 +98,10 @@ def test_簡報題組_別家銀行題的禁用數字不會誤配更大的金額(
     case = _demo_case("國泰的信用卡年費多少？")
     assert not check_demo(case, Answer("這個問題我目前查不到相關資料，網路上常見年費約 1,300 元。", [], []))
     assert check_demo(case, Answer("查不到，但年費大約 300 元。", [], []))
+
+
+def test_驗證題組的正確段落都在知識庫裡且只有一段() -> None:
+    sections = Counter(c.section for c in load_chunks(KB))
+    expected = [s for _, s in HOLDOUT_CASES if s]
+    assert len(expected) == 15 and len(HOLDOUT_CASES) == 20
+    assert all(sections[s] == 1 for s in expected)

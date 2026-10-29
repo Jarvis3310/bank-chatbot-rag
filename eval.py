@@ -3,6 +3,7 @@
 檢索分數分三欄：退回模式（BM25＋同義詞）、純 BM25（不加同義詞，對照組）、混合檢索（服務實際使用）。
 範圍外題目以「檢索結果為空」判定通過。答案只用混合檢索產生。
 另有一組口語題（同義詞表沒涵蓋的說法），只測檢索，三欄都印第一名結果。
+驗證題組（另外寫、沒拿來調門檻的口語題，含 5 題知識庫查不到的）只測檢索，只回報結果、不當過關條件。
 --answer 時另跑「簡報題組」（週五簡報的現場測試題目），用混合檢索產生答案，逐題印通過與否。
 混合檢索用不了（沒有 OPENAI_API_KEY、embedding API 錯誤）時直接報錯結束，不會默默改用退回模式。
 服務（app.py）跑著時不能同時跑 eval：Qdrant 本機模式會鎖住向量庫資料夾。
@@ -52,6 +53,30 @@ COLLOQUIAL_CASES = [
     ("借的錢想一次全部還掉，要多付錢嗎", "提前清償"),
     ("有人打來說是銀行人員，要我給簡訊驗證碼", "防詐提醒"),
     ("想寄錢給在美國念書的小孩，要收多少錢", "國外匯款手續費"),
+]
+
+# 驗證題組：(問題, 應該找到的章節)；章節為 None 表示知識庫查不到。另外寫的口語題，沒有拿來調門檻，只回報結果、不當過關條件。只測檢索
+HOLDOUT_CASES = [
+    ("我那個戶頭快兩年沒動了 今天去領錢卡片直接不能用 要怎麼弄回來", "帳戶久未使用（靜止戶）"),
+    ("我想把帳戶收掉不用了 可是裡面還有綁扣水電費 可以直接收嗎", "結清（銷戶）"),
+    ("每次去分行都要抽號碼牌等超久 有沒有辦法先排好再過去", "臨櫃預約取號"),
+    ("出門忘記帶卡 可以只拿手機去領錢嗎", "無卡提款"),
+    ("錢包被偷了 裡面那張刷卡用的卡會不會被亂刷 我要先做什麼", "信用卡遺失或被盜刷"),
+    ("這個月卡費忘了繳 晚個幾天會被罰多少", "循環利息與違約金"),
+    ("買了一台兩萬多的手機 能不能拆成半年慢慢付 要多付利息嗎", "分期付款"),
+    ("我那張卡今年幾乎沒刷 明年會不會要被收錢啊", "年費"),
+    ("我28歲 跟老婆都還沒房子 想買第一間有沒有比較划算的方案", "青年首購房貸"),
+    ("去年借的那筆週轉金 現在想一次還完 會不會被多扣錢", "提前清償"),
+    ("想借一筆錢裝潢 不想拿房子去押 大概最多可以借多少", "信用貸款"),
+    ("上禮拜天半夜兩點要轉帳 App一直說暫停服務 是壞掉了嗎", "系統維護時間"),
+    ("剛剛有人打來說他是你們銀行的 叫我把簡訊收到的數字唸給他 這樣正常嗎", "防詐提醒"),
+    ("下禮拜要去美國 先在家用手機換美金會比去櫃台換便宜嗎", "線上換匯優惠"),
+    ("我搬家了 銀行寄的東西都還寄去舊家 可以自己在網路上改嗎 不想跑一趟", "變更通訊地址、電話或 Email"),
+    ("你們有在賣基金嗎 定期定額一個月最少扣多少", None),
+    ("想說存點黃金 你們有黃金存摺嗎 一公克多少錢", None),
+    ("想買車 你們可以辦車貸嗎 要準備什麼", None),
+    ("分行有保險箱可以租嗎 一年多少錢", None),
+    ("信用卡急用想預借現金 手續費怎麼算", None),
 ]
 
 
@@ -216,6 +241,7 @@ def main(with_answer: bool) -> None:
         print(f"\n答案含關鍵字（{ANSWER_COLUMN}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
 
     print_colloquial(rags)
+    print_holdout(rags)
     if with_answer:
         print_demo(rags[ANSWER_COLUMN])
 
@@ -270,6 +296,31 @@ def print_colloquial(rags: dict[str, RAG]) -> None:
     print()
     for name, n in hit1.items():
         print(f"【{name}】口語題第一名正確：{n}/{len(COLLOQUIAL_CASES)}")
+
+
+def print_holdout(rags: dict[str, RAG]) -> None:
+    """驗證題組：每欄印檢索結果，最後印各欄第一名、前 k 名與查不到的題目撞到幾題。只回報，不當過關條件。"""
+    print("\n=== 驗證題組（沒有拿來調門檻，只測檢索）===")
+    scores = {name: Score() for name in rags}
+    for q, expect in HOLDOUT_CASES:
+        lines = [f"{q}（應命中：{expect or '無'}）"]
+        for name, rag in rags.items():
+            sections = [h.chunk.section for h in rag.retrieve(q)]
+            s = scores[name]
+            if expect:
+                s.n_in += 1
+                s.hit1 += bool(sections) and sections[0] == expect
+                s.hitk += expect in sections
+                ok = bool(sections) and sections[0] == expect
+            else:
+                s.n_out += 1
+                s.out_hits += bool(sections)
+                ok = not sections
+            lines.append(f"   {'✅' if ok else '❌'} {name}：{' / '.join(sections) or '（無）'}")
+        print("\n".join(lines))
+    print()
+    for name, s in scores.items():
+        print(f"【{name}】驗證題組第一名正確：{s.hit1}/{s.n_in}　前 {TOP_K} 名有找到：{s.hitk}/{s.n_in}　查不到的題目撞到段落：{s.out_hits}/{s.n_out}")
 
 
 if __name__ == "__main__":
