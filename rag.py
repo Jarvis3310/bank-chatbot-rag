@@ -17,7 +17,7 @@ from pathlib import Path
 
 import llm
 from embedding import Embedder, OpenAIEmbedder
-from vector_index import VectorIndex
+from vector_index import VectorIndex, degrade
 
 # 口語 → 知識庫用語。BM25 只比對字面，這張表補上常見說法。
 SYNONYMS = {
@@ -225,9 +225,7 @@ class RAG:
                 path = vector_dir or Path(kb_dir).parent / "vector_store"
                 self.vectors = VectorIndex(self.chunks, embedder, path, clock, strict)
             except Exception as e:
-                if strict:
-                    raise
-                print("向量檢索用不了，改用退回模式：", repr(e))
+                degrade(strict, "向量檢索用不了，改用退回模式：", e)
 
     def close(self) -> None:
         """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。"""
@@ -250,19 +248,17 @@ class RAG:
         top = sorted(rrf, key=rrf.get, reverse=True)[:TOP_K]
         return [Hit(self.chunks[i], similarity=sims.get(i), bm25=bm25s.get(i)) for i in top]
 
-    def _fallback_hits(self, query: str) -> list[Hit]:
-        """退回模式：BM25＋同義詞。"""
-        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(expand_query(query))[:TOP_K]]
+    def _bm25_hits(self, query: str) -> list[Hit]:
+        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[:TOP_K]]
 
     def retrieve(self, query: str) -> list[Hit]:
-        if self.mode is Mode.HYBRID:
-            sims = self.vectors.search(query) if self.vectors is not None else None
-            if sims is None:  # 向量檢索用不了（沒 key、失敗、冷卻中、向量庫全空）就改走退回模式
-                return self._fallback_hits(query)
-            return self._hybrid(query, dict(sims))
-        if self.mode is Mode.FALLBACK:
-            return self._fallback_hits(query)
-        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[:TOP_K]]
+        if self.mode is Mode.BM25_ONLY:
+            return self._bm25_hits(query)
+        # 退回模式沒有向量索引；混合檢索的向量檢索用不了（失敗、冷卻中、向量庫全空）時也走退回模式
+        sims = self.vectors.search(query) if self.vectors is not None else None
+        if sims is None:
+            return self._bm25_hits(expand_query(query))
+        return self._hybrid(query, dict(sims))
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
         history = history or []

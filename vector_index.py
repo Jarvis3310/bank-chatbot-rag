@@ -12,7 +12,7 @@ import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
@@ -37,6 +37,22 @@ def point_id(chunk: Chunk) -> str:
 def chunk_hash(chunk: Chunk) -> str:
     """拿去 embedding 的整段文字的指紋，內容一改就變。"""
     return hashlib.sha256(chunk.embed_text.encode("utf-8")).hexdigest()
+
+
+class Point(NamedTuple):
+    """知識庫目前的一段，在向量庫裡應有的樣子。"""
+
+    id: str  # point id
+    index: int  # 段落編號
+    chunk: Chunk
+    hash: str
+
+
+def degrade(strict: bool, message: str, e: Exception) -> None:
+    """向量檢索用不了：strict（eval）時丟出例外，不默默退回 BM25；平常只印出原因。"""
+    if strict:
+        raise e
+    print(message, repr(e))
 
 
 class VectorIndex:
@@ -84,9 +100,7 @@ class VectorIndex:
             with self.lock:
                 points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
         except Exception as e:  # API 錯誤、逾時
-            if self.strict:
-                raise
-            print("向量檢索失敗，改用退回模式：", repr(e))
+            degrade(self.strict, "向量檢索失敗，改用退回模式：", e)
             self.search_failed_at = self.clock()
             return None
         self.search_failed_at = None
@@ -97,7 +111,7 @@ class VectorIndex:
 
         重算失敗不丟例外：沒變的段落沿用舊向量，沒重算到的段落從向量庫移除，冷卻 COOLDOWN 秒後由下一題重試。
         """
-        current = {point_id(c): (i, chunk_hash(c)) for i, c in enumerate(self.chunks)}
+        current = [Point(point_id(c), i, c, chunk_hash(c)) for i, c in enumerate(self.chunks)]
         stored: dict[str, str] = {}  # point id → hash
         with self.lock:
             if self.store.collection_exists(COLLECTION):
@@ -108,21 +122,20 @@ class VectorIndex:
                     if offset is None:
                         break
             # 沒變的段落只更新段落編號（知識庫增刪段落後編號會位移）
-            for pid, (i, h) in current.items():
-                if stored.get(pid) == h:
-                    self.store.set_payload(COLLECTION, payload={"index": i}, points=[pid])
+            for pt in current:
+                if stored.get(pt.id) == pt.hash:
+                    self.store.set_payload(COLLECTION, payload={"index": pt.index}, points=[pt.id])
 
-        stale = [pid for pid in stored if pid not in current]
-        todo = [pid for pid, (_, h) in current.items() if stored.get(pid) != h]
+        current_ids = {pt.id for pt in current}
+        stale = [pid for pid in stored if pid not in current_ids]
+        todo = [pt for pt in current if stored.get(pt.id) != pt.hash]
         vectors: list[list[float]] = []
         if todo:  # 算 embedding 時不鎖向量庫，補建期間其他問題照常查詢
             try:
-                vectors = self.embedder.embed([self.chunks[current[pid][0]].embed_text for pid in todo])
+                vectors = self.embedder.embed([pt.chunk.embed_text for pt in todo])
             except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
-                if self.strict:
-                    raise
-                print(f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：{e}")
-                stale += [pid for pid in todo if pid in stored]
+                degrade(self.strict, f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：", e)
+                stale += [pt.id for pt in todo if pt.id in stored]
                 self.sync_failed_at = self.clock()
             else:
                 self.sync_failed_at = None
@@ -134,8 +147,8 @@ class VectorIndex:
                 self.store.upsert(
                     COLLECTION,
                     points=[
-                        PointStruct(id=pid, vector=v, payload={"index": current[pid][0], "key": self.chunks[current[pid][0]].key, "hash": current[pid][1]})
-                        for pid, v in zip(todo, vectors)
+                        PointStruct(id=pt.id, vector=v, payload={"index": pt.index, "key": pt.chunk.key, "hash": pt.hash})
+                        for pt, v in zip(todo, vectors)
                     ],
                 )
             if stale:
