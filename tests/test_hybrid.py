@@ -1,36 +1,7 @@
-import hashlib
-import math
-import random
 from pathlib import Path
 
+from conftest import KB, FakeEmbedder
 from rag import RAG
-
-KB = Path(__file__).resolve().parent.parent / "kb"
-DIM = 32
-
-
-class FakeEmbedder:
-    """假 embedding：文字含某個關鍵字就往對應的維度靠，其餘是由文字決定的小雜訊。
-
-    含同一組關鍵字的文字相似度接近 1，其他文字之間接近 0。
-    """
-
-    def __init__(self, rules: dict[str, int]):
-        self.rules = rules
-        self.calls: list[str] = []
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        self.calls.extend(texts)
-        return [self._vector(t) for t in texts]
-
-    def _vector(self, text: str) -> list[float]:
-        rnd = random.Random(hashlib.sha256(text.encode()).digest())
-        vec = [rnd.gauss(0, 0.05) for _ in range(DIM)]
-        for keyword, dim in self.rules.items():
-            if keyword in text:
-                vec[dim] += 1.0
-        norm = math.sqrt(sum(v * v for v in vec))
-        return [v / norm for v in vec]
 
 
 def test_混合檢索回傳的段落帶兩種分數(tmp_path: Path) -> None:

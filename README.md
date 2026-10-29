@@ -17,7 +17,7 @@ LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段
 | `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
 | `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）只測檢索；`--answer` 時另跑 14 題簡報題組 |
-| `tests/` | 單元測試，執行 `python -m pytest` |
+| `tests/` | 單元測試（用假 embedding，不呼叫 API），共用設定在 `tests/conftest.py`；安裝與執行見下方「跑測試」 |
 
 ---
 
@@ -39,6 +39,17 @@ python app.py
 檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-small`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`（跟 `LLM_PROVIDER` 選哪家無關）。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
 
 > 服務（`python app.py`）跑著時不能同時跑 `eval.py`：Qdrant 本機模式會鎖住 `vector_store/` 資料夾，請先停掉服務再跑評測。
+
+### 跑測試
+
+測試相依（pytest）放在 `requirements-dev.txt`，它會連同 `requirements.txt` 一起安裝。在已啟用的 `.venv` 裡：
+
+```powershell
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+測試不需要 `.env` 或 `OPENAI_API_KEY`。
 
 > 公司網路若 `pip install` 失敗，通常是要設定 proxy：`pip install --proxy http://公司proxy:port -r requirements.txt`。
 > 程式呼叫 LLM 和 LINE 時，也會自動使用環境變數 `HTTPS_PROXY`。

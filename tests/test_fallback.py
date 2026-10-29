@@ -5,27 +5,8 @@ from pathlib import Path
 import pytest
 from qdrant_client import QdrantClient
 
+from conftest import FALLBACK_Q, KB, BreakableEmbedder
 from rag import RAG
-from test_hybrid import KB, FakeEmbedder
-
-# 「幾點開門」要靠同義詞表才對得到「營業時間」：找得到就代表用的是退回模式
-FALLBACK_Q = "你們幾點開門？"
-
-
-class BreakableEmbedder(FakeEmbedder):
-    """建庫時正常；之後把 broken 設成 "error" 會報錯、"slow" 會卡 5 秒。"""
-
-    def __init__(self) -> None:
-        super().__init__({})
-        self.broken: str | None = None
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        if self.broken == "error":
-            self.calls.extend(texts)
-            raise RuntimeError("Embedding API 錯誤 429")
-        if self.broken == "slow":
-            time.sleep(5)
-        return super().embed(texts)
 
 
 def test_embedding報錯時切到退回模式不丟例外(tmp_path: Path) -> None:

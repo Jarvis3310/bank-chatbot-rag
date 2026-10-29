@@ -1,10 +1,7 @@
-from pathlib import Path
-
 import pytest
 
+from conftest import KB
 from rag import RAG
-
-KB = Path(__file__).resolve().parent.parent / "kb"
 
 
 @pytest.mark.parametrize("mode", ["fallback", "bm25"])

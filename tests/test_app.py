@@ -4,9 +4,8 @@ from pathlib import Path
 import pytest
 
 import app
+from conftest import FALLBACK_Q, KB, BreakableEmbedder
 from rag import RAG
-from test_fallback import FALLBACK_Q, BreakableEmbedder
-from test_hybrid import KB
 
 
 def test_embedding失敗時網頁聊天API仍回200和答案(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
