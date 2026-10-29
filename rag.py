@@ -12,6 +12,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import llm
@@ -178,16 +179,16 @@ class Answer:
     retrieved: list[Hit]
 
 
-# 檢索模式：混合檢索（向量＋純 BM25 用 RRF 合併，預設）、退回模式（BM25＋同義詞）、純 BM25（eval 對照組）
-HYBRID = "hybrid"
-FALLBACK = "fallback"
-BM25_ONLY = "bm25"
-MODES = (HYBRID, FALLBACK, BM25_ONLY)
+class Mode(Enum):
+    HYBRID = "hybrid"  # 混合檢索：向量＋純 BM25 用 RRF 合併（服務預設）
+    FALLBACK = "fallback"  # 退回模式：BM25＋同義詞，不需要 embedding
+    BM25_ONLY = "bm25"  # 純 BM25：eval 對照組
+
 
 # 各模式的 BM25 門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。
 # 純 BM25 的值用 eval 另外調：範圍外最高 5.6、範圍內應命中段落最低 10.6，取中間
 # 混合檢索的 BM25 門檻先沿用純 BM25 的值，待用 eval 調整
-MIN_SCORES = {HYBRID: 8.0, FALLBACK: 8.0, BM25_ONLY: 8.0}
+MIN_SCORES = {Mode.HYBRID: 8.0, Mode.FALLBACK: 8.0, Mode.BM25_ONLY: 8.0}
 
 RRF_K = 60  # RRF 的常數，常用值
 
@@ -197,15 +198,14 @@ class RAG:
         self,
         kb_dir: str | Path = "kb",
         top_k: int = 4,
-        mode: str = HYBRID,
+        mode: Mode = Mode.HYBRID,
         min_score: float | None = None,
         embedder: Embedder | None = None,
         vector_dir: str | Path | None = None,
         clock: Callable[[], float] = time.monotonic,
         strict: bool = False,  # True：向量檢索用不了就丟例外、不退回（eval 用）
     ):
-        if mode not in MODES:
-            raise ValueError(f"不支援的檢索模式：{mode}")
+        mode = Mode(mode)  # 不支援的模式丟 ValueError
         self.chunks = load_chunks(Path(kb_dir))
         # 章節標題重複一次，加重權重
         self.index = BM25([tokenize(f"{c.section} {c.embed_text}") for c in self.chunks])
@@ -213,7 +213,7 @@ class RAG:
         self.top_k = top_k
         self.min_score = MIN_SCORES[mode] if min_score is None else min_score
         self.vectors: VectorIndex | None = None  # 沒 key 或向量庫打不開時，整段執行期間都用退回模式
-        if mode == HYBRID:
+        if mode is Mode.HYBRID:
             try:
                 embedder = embedder or OpenAIEmbedder()
                 # 向量庫資料夾預設放在知識庫旁邊，不進版控
@@ -248,16 +248,16 @@ class RAG:
 
     def _fallback_hits(self, query: str) -> list[Hit]:
         """退回模式：BM25＋同義詞，門檻用退回模式自己的值。"""
-        ranked = self._bm25(expand_query(query), MIN_SCORES[FALLBACK])
+        ranked = self._bm25(expand_query(query), MIN_SCORES[Mode.FALLBACK])
         return [Hit(self.chunks[i], bm25=s) for i, s in ranked[: self.top_k]]
 
     def retrieve(self, query: str) -> list[Hit]:
-        if self.mode == HYBRID:
+        if self.mode is Mode.HYBRID:
             sims = self.vectors.search(query) if self.vectors is not None else None
             if sims is None:  # 向量檢索用不了（沒 key、失敗、冷卻中、向量庫全空）就改走退回模式
                 return self._fallback_hits(query)
             return self._hybrid(query, dict(sims))
-        if self.mode == FALLBACK:
+        if self.mode is Mode.FALLBACK:
             return self._fallback_hits(query)
         return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[: self.top_k]]
 

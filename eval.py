@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import llm  # noqa: E402
-from rag import BM25_ONLY, FALLBACK, HYBRID, RAG, SYSTEM_PROMPT, Answer  # noqa: E402
+from rag import RAG, SYSTEM_PROMPT, Answer, Mode  # noqa: E402
 
 # (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，檢索結果應為空
 CASES = [
@@ -139,8 +139,8 @@ DEMO_CASES = [
 
 
 # 檢索模式 → 欄位名稱（依印出順序）
-COLUMNS = {FALLBACK: "退回模式", BM25_ONLY: "純 BM25", HYBRID: "混合檢索"}
-ANSWER_COLUMN = COLUMNS[HYBRID]  # 答案只用服務實際使用的模式產生
+COLUMNS = {Mode.FALLBACK: "退回模式", Mode.BM25_ONLY: "純 BM25", Mode.HYBRID: "混合檢索"}
+ANSWER_COLUMN = COLUMNS[Mode.HYBRID]  # 答案只用服務實際使用的模式產生
 
 
 @dataclass
