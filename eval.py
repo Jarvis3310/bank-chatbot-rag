@@ -60,7 +60,8 @@ def main(with_answer: bool) -> None:
     if not os.getenv("OPENAI_API_KEY", "").strip():
         sys.exit("混合檢索需要 OPENAI_API_KEY（只測檢索也需要），請先在 .env 設定")
     try:
-        rags = {name: RAG("kb", mode=mode) for name, mode in COLUMNS}
+        # strict：向量檢索用不了就丟例外，不默默改用退回模式
+        rags = {name: RAG("kb", mode=mode, strict=True) for name, mode in COLUMNS}
     except RuntimeError as e:
         sys.exit(f"混合檢索用不了：{e}")
     if with_answer and not llm.enabled():

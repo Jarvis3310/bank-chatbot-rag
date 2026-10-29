@@ -29,8 +29,19 @@ import llm  # noqa: E402
 from rag import RAG, Hit, format_for_line  # noqa: E402
 
 BASE = Path(__file__).parent
-rag = RAG(BASE / "kb")
 app = Flask(__name__)
+
+# 服務使用的 RAG：第一次用到才建立（import 時不碰 API 和向量庫），測試可以直接換掉 rag
+rag: RAG | None = None
+_rag_lock = threading.Lock()
+
+
+def get_rag() -> RAG:
+    global rag
+    with _rag_lock:  # 向量庫資料夾只能被一個 client 打開，不能同時建兩個
+        if rag is None:
+            rag = RAG(BASE / "kb")
+        return rag
 
 # 每位使用者保留最近 3 輪對話，讓追問接得上（重啟後清空）
 histories: dict[str, deque] = defaultdict(lambda: deque(maxlen=3))
@@ -41,7 +52,7 @@ def ask(session: str, question: str):
     if question.strip() in {"重來", "清除", "reset"}:
         histories[session].clear()
         return None, 0.0
-    ans = rag.answer(question, list(histories[session]))
+    ans = get_rag().answer(question, list(histories[session]))
     histories[session].append((question, ans.text))
     return ans, time.time() - t0
 
@@ -133,11 +144,11 @@ def index():
 
 @app.get("/health")
 def health():
-    return jsonify(chunks=len(rag.chunks), llm=llm.provider(), line=line_ready())
+    return jsonify(chunks=len(get_rag().chunks), llm=llm.provider(), line=line_ready())
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
-    print(f"知識庫段落數：{len(rag.chunks)}　LLM：{llm.provider()}　LINE：{'已設定' if line_ready() else '未設定'}")
+    print(f"知識庫段落數：{len(get_rag().chunks)}　LLM：{llm.provider()}　LINE：{'已設定' if line_ready() else '未設定'}")
     print(f"網頁聊天：http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, threaded=True)
