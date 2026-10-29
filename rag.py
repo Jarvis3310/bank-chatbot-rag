@@ -2,6 +2,8 @@
 
 混合檢索 = 向量檢索（OpenAI embedding，存在 Qdrant 本機模式）＋純 BM25（字元 bigram），
 兩邊的排名用 RRF 合併。退回模式是 BM25＋同義詞表，不需要 embedding。
+
+專案慣例是不裝廠商 SDK、直接打 REST；qdrant-client 是例外，因為 Qdrant 本機模式（不架伺服器）只有它提供。
 """
 from __future__ import annotations
 
