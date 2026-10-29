@@ -240,6 +240,8 @@ class RAG:
         self.clock = clock
         self.strict = strict
         self.vector_failed_at: float | None = None  # 上次向量檢索失敗的時間
+        self.build_failed_at: float | None = None  # 上次建庫／增量更新失敗的時間，冷卻後重試
+        self.has_vectors = False  # 向量庫一個向量都沒有時，檢索改走退回模式
         self.vector_ready = False  # 沒 key 或向量庫打不開時，整段執行期間都用退回模式
         if mode == HYBRID:
             try:
@@ -264,7 +266,7 @@ class RAG:
         """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落。
 
         重算失敗（含逾時、沒網路）不阻擋啟動：沒變的段落沿用舊向量，
-        沒重算到的段落從向量庫移除，只靠 BM25 檢索，下次啟動再重算。
+        沒重算到的段落從向量庫移除，只靠 BM25 檢索，冷卻 COOLDOWN 秒後由下一題重試。
         """
         stored: dict[str, tuple[str, str]] = {}  # point id → (key, hash)
         if self.store.collection_exists(COLLECTION):
@@ -291,7 +293,9 @@ class RAG:
                     raise  # eval 不能默默退回 BM25
                 print(f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：{e}")
                 stale += [pid for pid, _, _ in todo if pid in stored]
+                self.build_failed_at = self.clock()
             else:
+                self.build_failed_at = None
                 if not self.store.collection_exists(COLLECTION):
                     self.store.create_collection(COLLECTION, vectors_config=VectorParams(size=len(vectors[0]), distance=Distance.COSINE))
                 self.store.upsert(
@@ -303,6 +307,7 @@ class RAG:
                 )
         if stale:
             self.store.delete(COLLECTION, points_selector=stale)
+        self.has_vectors = self.store.collection_exists(COLLECTION) and self.store.count(COLLECTION).count > 0
 
     def _bm25(self, query: str, min_score: float | None = None) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 分數），分數高的在前。"""
@@ -332,8 +337,6 @@ class RAG:
 
     def _vector(self, query: str) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 相似度），相似度高的在前。"""
-        if not self.store.collection_exists(COLLECTION):
-            return []  # 第一次啟動就重算失敗，向量庫還是空的
         vec = self._embed_query(query)
         points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
         return [(p.payload["index"], p.score) for p in points if p.score >= self.min_similarity]
@@ -359,6 +362,12 @@ class RAG:
                 return self._fallback_hits(query)
             # 失敗後冷卻一段時間不再試，避免斷網時每題都多等 QUERY_TIMEOUT 秒
             if self.vector_failed_at is not None and self.clock() - self.vector_failed_at < COOLDOWN:
+                return self._fallback_hits(query)
+            # 建庫或增量更新失敗過：冷卻時間到就重試，成功就回到混合檢索
+            if self.build_failed_at is not None and self.clock() - self.build_failed_at >= COOLDOWN:
+                self._build_vectors()
+            # 向量庫全空（例如第一次啟動就斷網）時，比照 embedding 失敗改走退回模式
+            if not self.has_vectors:
                 return self._fallback_hits(query)
             try:
                 hits = self._hybrid(query)

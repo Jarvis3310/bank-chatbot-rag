@@ -2,7 +2,7 @@
 import shutil
 from pathlib import Path
 
-from conftest import KB, FakeEmbedder
+from conftest import KB, FakeClock, FakeEmbedder
 from rag import RAG
 
 
@@ -93,11 +93,29 @@ def test_重算失敗仍能啟動且沒重算的段落可用BM25檢索(tmp_path:
     assert unchanged[0].chunk.section == "跨行轉帳手續費" and unchanged[0].similarity > 0.9
 
 
-def test_第一次啟動就重算失敗仍能用BM25檢索(tmp_path: Path) -> None:
+def test_第一次啟動就重算失敗時向量庫全空_改用退回模式(tmp_path: Path) -> None:
+    # 「不見」要靠同義詞表才對得到「遺失」；純 BM25 的第一名會是「轉錯帳怎麼辦」
     embedder = BrokenAtStartup({})
     rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors")
-    embedder.broken = False
-    hits = rag.retrieve("ATM 轉帳每日上限多少")
+    hits = rag.retrieve("信用卡不見了怎麼辦？")
     rag.close()
 
-    assert hits[0].chunk.section == "轉帳限額" and hits[0].similarity is None
+    assert hits[0].chunk.section == "信用卡遺失或被盜刷"
+    assert all(h.similarity is None for h in hits)
+
+
+def test_建庫失敗後冷卻時間到且embedding恢復_補建向量回到混合檢索(tmp_path: Path) -> None:
+    embedder, clock = BrokenAtStartup({"跨行轉帳手續費": 0, "ATM 跨行": 0}), FakeClock()
+    rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors", clock=clock)
+    embedder.broken = False
+
+    clock.now += 59
+    assert rag.retrieve("用 ATM 跨行轉帳要多少手續費")[0].similarity is None
+    assert embedder.calls == []  # 冷卻中不重試
+
+    clock.now += 1.5
+    hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    rag.close()
+
+    assert hits[0].chunk.section == "跨行轉帳手續費"
+    assert hits[0].similarity is not None and hits[0].similarity > 0.9
