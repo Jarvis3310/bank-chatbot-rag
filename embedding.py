@@ -12,6 +12,7 @@ import requests
 
 MODEL = "text-embedding-3-small"
 BATCH = 100  # 一次請求最多送幾段
+TIMEOUT = 30  # 秒；問題的 embedding 另有 vector_index.QUERY_TIMEOUT 較短的上限
 
 
 class Embedder(Protocol):
@@ -19,11 +20,10 @@ class Embedder(Protocol):
 
 
 class OpenAIEmbedder:
-    def __init__(self, api_key: str | None = None, timeout: float = 30):
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY", "").strip()
+    def __init__(self) -> None:
+        self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not self.api_key:
             raise RuntimeError("混合檢索需要 OPENAI_API_KEY（embedding 一律使用 OpenAI）")
-        self.timeout = timeout
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
@@ -32,7 +32,7 @@ class OpenAIEmbedder:
                 "https://api.openai.com/v1/embeddings",
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 json={"model": MODEL, "input": texts[i : i + BATCH]},
-                timeout=self.timeout,
+                timeout=TIMEOUT,
             )
             if r.status_code >= 400:
                 raise RuntimeError(f"Embedding API 錯誤 {r.status_code}：{r.text[:300]}")

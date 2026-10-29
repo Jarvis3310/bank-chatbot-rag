@@ -185,11 +185,11 @@ class Mode(Enum):
     BM25_ONLY = "bm25"  # 純 BM25：eval 對照組
 
 
-# 各模式的 BM25 門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。
-# 純 BM25 的值用 eval 另外調：範圍外最高 5.6、範圍內應命中段落最低 10.6，取中間
-# 混合檢索的 BM25 門檻先沿用純 BM25 的值，待用 eval 調整
-MIN_SCORES = {Mode.HYBRID: 8.0, Mode.FALLBACK: 8.0, Mode.BM25_ONLY: 8.0}
+# BM25 門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。三種模式共用，eval 證明需要時再分開。
+# 用純 BM25 的 eval 調出：範圍外最高 5.6、範圍內應命中段落最低 10.6，取中間
+MIN_SCORE = 8.0
 
+TOP_K = 4  # 檢索回傳幾段
 RRF_K = 60  # RRF 的常數，常用值
 
 
@@ -197,9 +197,7 @@ class RAG:
     def __init__(
         self,
         kb_dir: str | Path = "kb",
-        top_k: int = 4,
         mode: Mode = Mode.HYBRID,
-        min_score: float | None = None,
         embedder: Embedder | None = None,
         vector_dir: str | Path | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -210,8 +208,6 @@ class RAG:
         # 章節標題重複一次，加重權重
         self.index = BM25([tokenize(f"{c.section} {c.embed_text}") for c in self.chunks])
         self.mode = mode
-        self.top_k = top_k
-        self.min_score = MIN_SCORES[mode] if min_score is None else min_score
         self.vectors: VectorIndex | None = None  # 沒 key 或向量庫打不開時，整段執行期間都用退回模式
         if mode is Mode.HYBRID:
             try:
@@ -229,12 +225,11 @@ class RAG:
         if self.vectors is not None:
             self.vectors.close()
 
-    def _bm25(self, query: str, min_score: float | None = None) -> list[tuple[int, float]]:
+    def _bm25(self, query: str) -> list[tuple[int, float]]:
         """過門檻的段落（段落編號, 分數），分數高的在前。"""
-        min_score = self.min_score if min_score is None else min_score
         scores = self.index.scores(tokenize(query))
         ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-        return [(i, s) for i, s in ranked if s >= min_score]
+        return [(i, s) for i, s in ranked if s >= MIN_SCORE]
 
     def _hybrid(self, query: str, sims: dict[int, float]) -> list[Hit]:
         """兩邊各自過門檻，過其中一邊就進入 RRF 合併；排序只依兩邊的排名。"""
@@ -243,13 +238,12 @@ class RAG:
         for ranked in (sims, bm25s):
             for rank, i in enumerate(ranked, 1):
                 rrf[i] = rrf.get(i, 0.0) + 1 / (RRF_K + rank)
-        top = sorted(rrf, key=rrf.get, reverse=True)[: self.top_k]
+        top = sorted(rrf, key=rrf.get, reverse=True)[:TOP_K]
         return [Hit(self.chunks[i], similarity=sims.get(i), bm25=bm25s.get(i)) for i in top]
 
     def _fallback_hits(self, query: str) -> list[Hit]:
-        """退回模式：BM25＋同義詞，門檻用退回模式自己的值。"""
-        ranked = self._bm25(expand_query(query), MIN_SCORES[Mode.FALLBACK])
-        return [Hit(self.chunks[i], bm25=s) for i, s in ranked[: self.top_k]]
+        """退回模式：BM25＋同義詞。"""
+        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(expand_query(query))[:TOP_K]]
 
     def retrieve(self, query: str) -> list[Hit]:
         if self.mode is Mode.HYBRID:
@@ -259,7 +253,7 @@ class RAG:
             return self._hybrid(query, dict(sims))
         if self.mode is Mode.FALLBACK:
             return self._fallback_hits(query)
-        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[: self.top_k]]
+        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[:TOP_K]]
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
         history = history or []

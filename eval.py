@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import llm  # noqa: E402
-from rag import RAG, SYSTEM_PROMPT, Answer, Mode  # noqa: E402
+from rag import RAG, SYSTEM_PROMPT, TOP_K, Answer, Mode  # noqa: E402
 
 # (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，檢索結果應為空
 CASES = [
@@ -191,10 +191,9 @@ def main(with_answer: bool) -> None:
             lines.append(f"   {'✅' if ok else '❌'} 答案（應含「{keyword}」，{times[-1]:.1f}s）：{ans.text[:120]}")
         print("\n".join(lines))
 
-    top_k = rags[ANSWER_COLUMN].top_k
     print()
     for name, s in scores.items():
-        print(f"【{name}】檢索第一名正確：{s.hit1}/{s.n_in}　前 {top_k} 名有找到：{s.hitk}/{s.n_in}　範圍外撞到段落：{s.out_hits}/{s.n_out}")
+        print(f"【{name}】檢索第一名正確：{s.hit1}/{s.n_in}　前 {TOP_K} 名有找到：{s.hitk}/{s.n_in}　範圍外撞到段落：{s.out_hits}/{s.n_out}")
     if with_answer:
         print(f"\n答案含關鍵字（{ANSWER_COLUMN}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
 
