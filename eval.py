@@ -55,9 +55,20 @@ COLLOQUIAL_CASES = [
 ]
 
 
+CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+CN_TENS = re.compile(r"([一二兩三四五六七八九])?十([一二三四五六七八九])?")
+
+
+def cn_to_arabic(text: str) -> str:
+    """中文數字換成阿拉伯數字：「十五」→15、「二十」→20、「五」→5、「一〇五」→105（只處理到十位）。"""
+    text = CN_TENS.sub(lambda m: str(CN_DIGITS.get(m[1], 1) * 10 + CN_DIGITS.get(m[2], 0)), text)
+    return re.sub("[零〇一二兩三四五六七八九]", lambda m: str(CN_DIGITS[m[0]]), text)
+
+
 def contains_keyword(text: str, keyword: str) -> bool:
-    """答案是否含關鍵字。空白不計（「5 元」配得到「5元」）；數字開頭／結尾的關鍵字，前後不能再接數字或千分位逗號（「5 元」不算配到「15 元」）。"""
-    text, keyword = re.sub(r"\s+", "", text), re.sub(r"\s+", "", keyword)
+    """答案是否含關鍵字。空白不計（「5 元」配得到「5元」）；兩邊的中文數字先換成阿拉伯數字（「五次」配得到「5 次」）；
+    數字開頭／結尾的關鍵字，前後不能再接數字或千分位逗號（「5 元」不算配到「15 元」）。"""
+    text, keyword = cn_to_arabic(re.sub(r"\s+", "", text)), cn_to_arabic(re.sub(r"\s+", "", keyword))
     pattern = re.escape(keyword)
     if keyword[:1].isdigit():
         pattern = r"(?<!\d)(?<!\d[,.])" + pattern
