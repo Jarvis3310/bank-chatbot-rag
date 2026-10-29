@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 MIN_SIMILARITY = 0.40
 QUERY_TIMEOUT = 3.0  # 問題的 embedding 超過幾秒就放棄
 COOLDOWN = 60.0  # 失敗後幾秒內不再試
+CLOSE_TIMEOUT = 5.0  # close 最多等背景補建幾秒（embedding 卡住時不無限等）
 COLLECTION = "chunks"
 
 
@@ -75,15 +76,21 @@ class VectorIndex:
         self.sync_failed_at: float | None = None
         self.has_vectors = False
         self.rebuilding: threading.Thread | None = None
+        self.closed = False  # 關閉後不再查詢、補建，背景補建也不再寫入
         self._sync()
 
     def close(self) -> None:
-        """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。"""
+        """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。先等背景補建結束，最多 CLOSE_TIMEOUT 秒。"""
+        self.closed = True
+        if self.rebuilding is not None:
+            self.rebuilding.join(CLOSE_TIMEOUT)
         with self.lock:
             self.store.close()
 
     def search(self, query: str) -> list[tuple[int, float]] | None:
         """過門檻的段落（段落編號, 相似度），相似度高的在前；向量檢索用不了時回 None。"""
+        if self.closed:
+            return None
         # 失敗後冷卻一段時間不再試，避免斷網時每題都多等 QUERY_TIMEOUT 秒
         if self.search_failed_at is not None and self.clock() - self.search_failed_at < COOLDOWN:
             return None
@@ -114,6 +121,8 @@ class VectorIndex:
         current = [Point(point_id(c), i, c, chunk_hash(c)) for i, c in enumerate(self.chunks)]
         stored: dict[str, str] = {}  # point id → hash
         with self.lock:
+            if self.closed:
+                return
             if self.store.collection_exists(COLLECTION):
                 offset = None
                 while True:
@@ -134,6 +143,8 @@ class VectorIndex:
             try:
                 vectors = self.embedder.embed([pt.chunk.embed_text for pt in todo])
             except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
+                if self.closed:
+                    return
                 degrade(self.strict, f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：", e)
                 stale += [pt.id for pt in todo if pt.id in stored]
                 self.sync_failed_at = self.clock()
@@ -141,6 +152,8 @@ class VectorIndex:
                 self.sync_failed_at = None
 
         with self.lock:
+            if self.closed:  # 等 embedding 時服務已關閉
+                return
             if vectors:
                 if not self.store.collection_exists(COLLECTION):
                     self.store.create_collection(COLLECTION, vectors_config=VectorParams(size=len(vectors[0]), distance=Distance.COSINE))
@@ -165,8 +178,9 @@ class VectorIndex:
             try:
                 self._sync()
             except Exception as e:  # noqa: BLE001 — 背景補建的錯誤不能影響服務
-                print("背景補建向量失敗：", repr(e))
-                self.sync_failed_at = self.clock()
+                if not self.closed:
+                    print("背景補建向量失敗：", repr(e))
+                    self.sync_failed_at = self.clock()
 
         self.rebuilding = threading.Thread(target=run, daemon=True)
         self.rebuilding.start()

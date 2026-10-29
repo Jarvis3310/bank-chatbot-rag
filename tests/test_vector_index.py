@@ -1,9 +1,12 @@
 """向量索引：同步段落、查詢逾時、失敗冷卻、背景補建。用不了時 search 回 None。"""
 import dataclasses
+import threading
 import time
 from pathlib import Path
 
 import pytest
+
+import vector_index
 
 from conftest import KB, BreakableEmbedder, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup
 from rag import Chunk, load_chunks
@@ -119,6 +122,45 @@ def test_背景補建算embedding時不佔住向量庫_查詢照常(tmp_path: Pa
     finally:
         embedder.gate.set()
         index.close()
+
+
+def start_gated_rebuild(tmp_path: Path) -> tuple[VectorIndex, GatedAfterStartup, FakeClock]:
+    """建庫失敗、冷卻時間到後觸發背景補建，補建卡在 gate。"""
+    embedder, clock = GatedAfterStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
+    embedder.broken = False
+    clock.now += 60
+    assert index.search(FEE_Q) is None
+    return index, embedder, clock
+
+
+def test_補建中close會等補建結束_不拋例外也不印錯誤_之後不再補建(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    index, embedder, clock = start_gated_rebuild(tmp_path)
+    capsys.readouterr()
+    threading.Timer(0.2, embedder.gate.set).start()
+
+    index.close()
+    calls = len(embedder.calls)
+    clock.now += 120
+    assert index.search(FEE_Q) is None
+
+    time.sleep(0.5)  # 補建若沒等完，這段時間內會寫入已關閉的向量庫而印錯誤
+    assert capsys.readouterr().out == ""
+    assert len(embedder.calls) == calls
+
+
+def test_embedding卡住時close不無限等_之後補建也不寫入不印錯誤(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vector_index, "CLOSE_TIMEOUT", 0.2)
+    index, embedder, _ = start_gated_rebuild(tmp_path)
+    capsys.readouterr()
+
+    t0 = time.monotonic()
+    index.close()
+    assert time.monotonic() - t0 < 1.0
+
+    embedder.gate.set()  # 卡住的補建這時才回來
+    index.rebuilding.join(5)
+    assert capsys.readouterr().out == ""
 
 
 def test_strict時失敗就丟例外(tmp_path: Path) -> None:
