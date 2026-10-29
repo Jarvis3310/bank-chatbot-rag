@@ -1,12 +1,15 @@
 """評測：檢查「有沒有找到對的段落」，設定 LLM 後也檢查「答案有沒有關鍵數字」。
 
-檢索分數分兩欄：退回模式（BM25＋同義詞，服務實際使用）、純 BM25（不加同義詞，對照組）。
-範圍外題目以「檢索結果為空」判定通過。答案只用退回模式產生。
+檢索分數分三欄：退回模式（BM25＋同義詞）、純 BM25（不加同義詞，對照組）、混合檢索（服務實際使用）。
+範圍外題目以「檢索結果為空」判定通過。答案只用混合檢索產生。
+混合檢索用不了（沒有 OPENAI_API_KEY、embedding API 錯誤）時直接報錯結束，不會默默改用退回模式。
+服務（app.py）跑著時不能同時跑 eval：Qdrant 本機模式會鎖住向量庫資料夾。
 
 用法：
-  python eval.py            # 只測檢索，不需要 API key
+  python eval.py            # 只測檢索（需要 OPENAI_API_KEY 做 embedding）
   python eval.py --answer   # 也呼叫 LLM 產生答案（需在 .env 設定 LLM）
 """
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -16,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import llm  # noqa: E402
-from rag import BM25_ONLY, FALLBACK, RAG  # noqa: E402
+from rag import BM25_ONLY, FALLBACK, HYBRID, RAG  # noqa: E402
 
 # (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，檢索結果應為空
 CASES = [
@@ -39,8 +42,9 @@ CASES = [
 ]
 
 
-# (欄位名稱, 檢索模式)；答案只用第一欄（服務實際使用的模式）產生
-COLUMNS = [("退回模式", FALLBACK), ("純 BM25", BM25_ONLY)]
+# (欄位名稱, 檢索模式)
+COLUMNS = [("退回模式", FALLBACK), ("純 BM25", BM25_ONLY), ("混合檢索", HYBRID)]
+ANSWER_COLUMN = "混合檢索"  # 答案只用服務實際使用的模式產生
 
 
 @dataclass
@@ -53,7 +57,12 @@ class Score:
 
 
 def main(with_answer: bool) -> None:
-    rags = {name: RAG("kb", mode=mode) for name, mode in COLUMNS}
+    if not os.getenv("OPENAI_API_KEY", "").strip():
+        sys.exit("混合檢索需要 OPENAI_API_KEY（只測檢索也需要），請先在 .env 設定")
+    try:
+        rags = {name: RAG("kb", mode=mode) for name, mode in COLUMNS}
+    except RuntimeError as e:
+        sys.exit(f"混合檢索用不了：{e}")
     if with_answer and not llm.enabled():
         sys.exit("請先在 .env 設定 LLM_PROVIDER 與 API key")
 
@@ -63,7 +72,7 @@ def main(with_answer: bool) -> None:
     for q, expect, keyword in CASES:
         lines = [q]
         for name, rag in rags.items():
-            sections = [c.section for c, _ in rag.retrieve(q)]
+            sections = [h.chunk.section for h in rag.retrieve(q)]
             s = scores[name]
             if expect:
                 s.n_in += 1
@@ -78,19 +87,19 @@ def main(with_answer: bool) -> None:
 
         if with_answer:
             t0 = time.time()
-            ans = rags[COLUMNS[0][0]].answer(q)
+            ans = rags[ANSWER_COLUMN].answer(q)
             times.append(time.time() - t0)
             ok = keyword in ans.text
             ans_ok += ok
             lines.append(f"   {'✅' if ok else '❌'} 答案（應含「{keyword}」，{times[-1]:.1f}s）：{ans.text[:120]}")
         print("\n".join(lines))
 
-    top_k = rags[COLUMNS[0][0]].top_k
+    top_k = rags[ANSWER_COLUMN].top_k
     print()
     for name, s in scores.items():
         print(f"【{name}】檢索第一名正確：{s.hit1}/{s.n_in}　前 {top_k} 名有找到：{s.hitk}/{s.n_in}　範圍外撞到段落：{s.out_hits}/{s.n_out}")
     if with_answer:
-        print(f"\n答案含關鍵字（{COLUMNS[0][0]}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
+        print(f"\n答案含關鍵字（{ANSWER_COLUMN}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
 
 
 if __name__ == "__main__":
