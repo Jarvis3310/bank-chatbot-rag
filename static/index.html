@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>兩津商業銀行 AI 客服</title>
+<style>
+  :root {
+    --bg: #f4f6f5; --panel: #ffffff; --ink: #1d2421; --muted: #66706b;
+    --line: #dde3e0; --accent: #0b7a5a; --accent-ink: #ffffff; --bot: #eef3f1; --chip: #e4ece8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121614; --panel: #1a201d; --ink: #e6ece9; --muted: #95a19b;
+      --line: #2c3530; --accent: #3fb88f; --accent-ink: #0d1411; --bot: #222a26; --chip: #26302b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; padding: 0 16px; }
+  header { padding: 20px 0 12px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 20px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  #log { flex: 1; padding: 16px 0; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
+  .user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-start; background: var(--bot); border-bottom-left-radius: 4px; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 8px; white-space: normal; }
+  .refs { margin-top: 8px; font-size: 13px; }
+  details { margin-top: 6px; font-size: 13px; white-space: normal; }
+  summary { cursor: pointer; color: var(--muted); }
+  .hit { border-left: 3px solid var(--line); padding: 4px 10px; margin: 8px 0; }
+  .hit b { font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 10px; }
+  .chip { border: 0; background: var(--chip); color: var(--ink); padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+  form { display: flex; gap: 8px; padding: 12px 0 20px; position: sticky; bottom: 0; background: var(--bg); }
+  input { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; }
+  button.send { border: 0; background: var(--accent); color: var(--accent-ink); padding: 0 18px; border-radius: 12px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>兩津商業銀行 · AI 客服</h1>
+    <div class="sub">RAG demo：先從知識庫找出相關段落，再由 AI 依段落回答並附上出處（虛構資料）</div>
+  </header>
+  <div id="log"></div>
+  <div class="chips" id="chips"></div>
+  <form id="f">
+    <input id="q" placeholder="輸入問題，例如：信用卡不見了怎麼辦？" autocomplete="off">
+    <button class="send" id="b">送出</button>
+  </form>
+</div>
+<script>
+const samples = ["信用卡不見了怎麼辦？", "網銀轉帳一天上限多少？", "那手續費呢？", "房貸最多可以貸幾成？", "可以幫我買股票嗎？"];
+const log = document.getElementById("log"), q = document.getElementById("q"), b = document.getElementById("b");
+const sid = "web-" + Math.random().toString(36).slice(2, 8);
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+samples.forEach(s => { const c = el("button", "chip", s); c.type = "button"; c.onclick = () => send(s); document.getElementById("chips").append(c); });
+
+async function send(text) {
+  text = text.trim(); if (!text) return;
+  log.append(el("div", "msg user", text)); q.value = ""; b.disabled = true;
+  const wait = el("div", "msg bot", "查詢中…"); log.append(wait); wait.scrollIntoView({behavior: "smooth"});
+  try {
+    const r = await fetch("/api/chat", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({message: text, session_id: sid})});
+    const d = await r.json();
+    wait.textContent = d.answer;
+    if (d.sources && d.sources.length) wait.append(el("div", "refs", "📄 參考資料：" + d.sources.join("、")));
+    if (d.retrieved && d.retrieved.length) {
+      const det = el("details"); det.append(el("summary", null, `檢索到 ${d.retrieved.length} 段資料（點開看 AI 拿到了什麼）`));
+      d.retrieved.forEach(h => { const div = el("div", "hit"); div.append(el("b", null, `${h.label}　分數 ${h.score}`)); div.append(el("div", null, h.text)); det.append(div); });
+      wait.append(det);
+    }
+    if (d.seconds) wait.append(el("div", "meta", `${d.seconds} 秒 · ${d.provider}`));
+  } catch (e) { wait.textContent = "連線失敗：" + e; }
+  b.disabled = false; q.focus(); wait.scrollIntoView({behavior: "smooth"});
+}
+document.getElementById("f").onsubmit = e => { e.preventDefault(); send(q.value); };
+</script>
+</body>
+</html>
