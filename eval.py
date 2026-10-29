@@ -2,6 +2,7 @@
 
 檢索分數分三欄：退回模式（BM25＋同義詞）、純 BM25（不加同義詞，對照組）、混合檢索（服務實際使用）。
 範圍外題目以「檢索結果為空」判定通過。答案只用混合檢索產生。
+另有一組口語題（同義詞表沒涵蓋的說法），只測檢索，三欄都印第一名結果。
 混合檢索用不了（沒有 OPENAI_API_KEY、embedding API 錯誤）時直接報錯結束，不會默默改用退回模式。
 服務（app.py）跑著時不能同時跑 eval：Qdrant 本機模式會鎖住向量庫資料夾。
 
@@ -39,6 +40,16 @@ CASES = [
     ("信用卡繳款截止日是哪天", "繳款方式與期限", "20 日"),
     ("可以幫我買台積電股票嗎？", None, "查不到"),
     ("明天會下雨嗎", None, "查不到"),
+]
+
+# 口語題：(問題, 應該找到的章節)；說法刻意避開同義詞表，用來證明混合檢索不靠同義詞也聽得懂。只測檢索
+COLLOQUIAL_CASES = [
+    ("卡片找不到了，怎麼辦？", "信用卡遺失或被盜刷"),
+    ("錢匯到陌生人的戶頭了", "轉錯帳怎麼辦"),
+    ("好久沒用的戶頭突然不能用了", "帳戶久未使用（靜止戶）"),
+    ("借的錢想一次全部還掉，要多付錢嗎", "提前清償"),
+    ("有人打來說是銀行人員，要我給簡訊驗證碼", "防詐提醒"),
+    ("想寄錢給在美國念書的小孩，要收多少錢", "國外匯款手續費"),
 ]
 
 
@@ -100,6 +111,26 @@ def main(with_answer: bool) -> None:
         print(f"【{name}】檢索第一名正確：{s.hit1}/{s.n_in}　前 {top_k} 名有找到：{s.hitk}/{s.n_in}　範圍外撞到段落：{s.out_hits}/{s.n_out}")
     if with_answer:
         print(f"\n答案含關鍵字（{ANSWER_COLUMN}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
+
+    print_colloquial(rags)
+
+
+def print_colloquial(rags: dict[str, RAG]) -> None:
+    """口語題：每欄印第一名結果，最後印各欄第一名正確數。"""
+    print("\n=== 口語題（同義詞表沒涵蓋的說法，只測檢索）===")
+    hit1 = {name: 0 for name in rags}
+    for q, expect in COLLOQUIAL_CASES:
+        lines = [f"{q}（應命中：{expect}）"]
+        for name, rag in rags.items():
+            hits = rag.retrieve(q)
+            top = hits[0].chunk.section if hits else None
+            ok = top == expect
+            hit1[name] += ok
+            lines.append(f"   {'✅' if ok else '❌'} {name}：{top or '（無）'}")
+        print("\n".join(lines))
+    print()
+    for name, n in hit1.items():
+        print(f"【{name}】口語題第一名正確：{n}/{len(COLLOQUIAL_CASES)}")
 
 
 if __name__ == "__main__":

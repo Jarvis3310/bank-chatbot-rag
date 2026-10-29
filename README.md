@@ -16,7 +16,7 @@ LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段
 | `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，不進版控 |
 | `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
-| `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字 |
+| `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）只測檢索 |
 | `tests/` | 單元測試，執行 `python -m pytest` |
 
 ---
