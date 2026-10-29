@@ -1,6 +1,6 @@
 """RAG 核心：讀取知識庫 → 切段 → 混合檢索 → 交給 LLM 依段落回答。
 
-混合檢索 = 向量檢索（OpenAI embedding，存在 Qdrant 本機模式）＋純 BM25（字元 bigram），
+混合檢索 = 向量檢索（OpenAI embedding，存在 Qdrant 本機模式）＋BM25（字元 bigram＋同義詞表），
 兩邊的排名用 RRF 合併。退回模式是 BM25＋同義詞表，不需要 embedding。
 向量庫的同步、逾時、冷卻在 vector_index.py。
 """
@@ -189,7 +189,7 @@ class Answer:
 
 
 class Mode(Enum):
-    HYBRID = "hybrid"  # 混合檢索：向量＋純 BM25 用 RRF 合併（服務預設）
+    HYBRID = "hybrid"  # 混合檢索：向量＋BM25（含同義詞）用 RRF 合併（服務預設）
     FALLBACK = "fallback"  # 退回模式：BM25＋同義詞，不需要 embedding
     BM25_ONLY = "bm25"  # 純 BM25：eval 對照組
 
@@ -238,8 +238,8 @@ class RAG:
         return [(i, s) for i, s in ranked if s >= MIN_SCORE]
 
     def _hybrid(self, query: str, sims: dict[int, float]) -> list[Hit]:
-        """兩邊各自過門檻，過其中一邊就進入 RRF 合併；排序只依兩邊的排名。"""
-        bm25s = dict(self._bm25(query))
+        """兩邊各自過門檻，過其中一邊就進入 RRF 合併；排序只依兩邊的排名。BM25 這邊也套用同義詞表。"""
+        bm25s = dict(self._bm25(expand_query(query)))
         rrf: dict[int, float] = {}
         for ranked in (sims, bm25s):
             for rank, i in enumerate(ranked, 1):

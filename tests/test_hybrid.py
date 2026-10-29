@@ -27,6 +27,16 @@ def test_只被向量找到的段落只帶相似度(tmp_path: Path) -> None:
     assert hits[0].bm25 is None
 
 
+def test_混合檢索的BM25也套用同義詞(tmp_path: Path) -> None:
+    # 假 embedding 對不到任何段落，「幾點開門」只能靠同義詞表的 BM25 對到「營業時間」
+    rag = RAG(KB, embedder=FakeEmbedder({}), vector_dir=tmp_path)
+
+    hits = rag.retrieve("你們幾點開門？")
+
+    assert hits[0].chunk.section == "營業時間"
+    assert hits[0].bm25 is not None
+
+
 def test_混合檢索範圍外問題檢索結果為空(tmp_path: Path) -> None:
     rag = RAG(KB, embedder=FakeEmbedder({}), vector_dir=tmp_path)
 
