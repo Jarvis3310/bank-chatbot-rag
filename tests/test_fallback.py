@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from qdrant_client import QdrantClient
 
-from conftest import FALLBACK_Q, KB, BreakableEmbedder
+from conftest import FALLBACK_Q, KB, BreakableEmbedder, FakeClock
 from rag import RAG
 
 
@@ -31,14 +31,6 @@ def test_embedding卡住時3秒內切到退回模式(tmp_path: Path) -> None:
 
     assert elapsed < 3.5
     assert hits[0].chunk.section == "營業時間"
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
 
 
 def test_失敗後60秒內不再試向量_過了60秒會再試(tmp_path: Path) -> None:
