@@ -5,16 +5,18 @@
 知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 7 份文件、36 個段落。
 
 ```
-LINE / 網頁 ──► app.py ──► rag.py：檢索最相關的 4 段 ──► llm.py：依段落回答 ──► 回覆 + 參考資料
+LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段 ──► llm.py：依段落回答 ──► 回覆 + 參考資料
 ```
 
 | 檔案 | 用途 |
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
-| `rag.py` | 切段、中文檢索（BM25，不需 embedding）、組 prompt、解析出處 |
+| `rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
+| `embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-small`，一律用 `OPENAI_API_KEY` |
+| `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，不進版控 |
 | `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
-| `eval.py` | 16 題評測：退回模式、純 BM25 兩欄的檢索命中，以及答案是否含關鍵數字 |
+| `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字 |
 | `tests/` | 單元測試，執行 `python -m pytest` |
 
 ---
@@ -28,10 +30,15 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
+# 編輯 .env 填入 OPENAI_API_KEY（混合檢索的 embedding 需要）
 python app.py
 ```
 
 打開 http://localhost:8000 就是網頁聊天。這時 `.env` 的 `LLM_PROVIDER=none`，系統會直接回最相關的段落，可以先確認檢索正常。
+
+檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-small`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`（跟 `LLM_PROVIDER` 選哪家無關）。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
+
+> 服務（`python app.py`）跑著時不能同時跑 `eval.py`：Qdrant 本機模式會鎖住 `vector_store/` 資料夾，請先停掉服務再跑評測。
 
 > 公司網路若 `pip install` 失敗，通常是要設定 proxy：`pip install --proxy http://公司proxy:port -r requirements.txt`。
 > 程式呼叫 LLM 和 LINE 時，也會自動使用環境變數 `HTTPS_PROXY`。
@@ -56,7 +63,7 @@ AZURE_OPENAI_ENDPOINT=https://<資源名稱>.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT=...
 ```
 
-預設模型：Claude 用 `claude-sonnet-5-5`、OpenAI 用 `gpt-4o-mini`，要換就設定 `LLM_MODEL=`。重啟 `python app.py` 後，再跑一次評測：
+預設模型：Claude 用 `claude-sonnet-5-5`、OpenAI 用 `gpt-4o-mini`，要換就設定 `LLM_MODEL=`。不論 LLM 選哪家，`OPENAI_API_KEY` 都要設定（混合檢索的 embedding 用）。停掉服務後跑一次評測，再重啟 `python app.py`：
 
 ```powershell
 python eval.py --answer
@@ -115,7 +122,6 @@ cloudflared tunnel --url http://localhost:8000
 
 ## 6. 這個 demo 刻意省略的（正式專案要補）
 
-- 檢索：知識庫大了要改用向量檢索（embedding）或混合檢索
 - 文件來源：PDF、Word、網頁的解析與定期更新
 - 對話紀錄：目前存在記憶體，重啟就清空
 - 部署、監控、權限、個資遮罩、轉真人客服

@@ -1,17 +1,22 @@
-"""RAG 核心：讀取知識庫 → 切段 → 中文 BM25 檢索 → 交給 LLM 依段落回答。
+"""RAG 核心：讀取知識庫 → 切段 → 混合檢索 → 交給 LLM 依段落回答。
 
-檢索用 BM25（字元 bigram），不需要 embedding API key，知識庫小的時候效果就夠好。
-正式專案可換成向量檢索（embedding），介面不用改。
+混合檢索 = 向量檢索（OpenAI embedding，存在 Qdrant 本機模式）＋純 BM25（字元 bigram），
+兩邊的排名用 RRF 合併。退回模式是 BM25＋同義詞表，不需要 embedding。
 """
 from __future__ import annotations
 
 import math
 import re
+import uuid
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
+
 import llm
+from embedding import Embedder, OpenAIEmbedder
 
 # 口語 → 知識庫用語。BM25 只比對字面，這張表補上常見說法。
 SYNONYMS = {
@@ -79,6 +84,16 @@ class Chunk:
     @property
     def label(self) -> str:
         return f"{self.doc} › {self.section}"
+
+    @property
+    def key(self) -> str:
+        """在向量庫裡識別這一段：來源檔＋章節標題。"""
+        return f"{self.source_file}#{self.section}"
+
+    @property
+    def embed_text(self) -> str:
+        """拿去 embedding 的文字，跟 BM25 建索引的內容一致（文件標題＋章節標題＋內文）。"""
+        return f"{self.doc} {self.section}\n{self.text}"
 
 
 def load_chunks(kb_dir: Path) -> list[Chunk]:
@@ -148,39 +163,107 @@ def is_followup(question: str) -> bool:
 
 
 @dataclass
+class Hit:
+    """一段檢索結果。沒被某一邊找到（沒過該邊門檻）就沒有該分數。"""
+
+    chunk: Chunk
+    similarity: float | None = None  # 向量相似度（cosine）
+    bm25: float | None = None  # BM25 分數
+
+
+@dataclass
 class Answer:
     text: str
     sources: list[Chunk]
-    retrieved: list[tuple[Chunk, float]]
+    retrieved: list[Hit]
 
 
-# 檢索模式：退回模式（BM25＋同義詞，預設）、純 BM25（不加同義詞，eval 對照組）
+# 檢索模式：混合檢索（向量＋純 BM25 用 RRF 合併，預設）、退回模式（BM25＋同義詞）、純 BM25（eval 對照組）
+HYBRID = "hybrid"
 FALLBACK = "fallback"
 BM25_ONLY = "bm25"
-MODES = (FALLBACK, BM25_ONLY)
+MODES = (HYBRID, FALLBACK, BM25_ONLY)
 
-# 各模式的分數門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。
+# 各模式的 BM25 門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。
 # 純 BM25 的值用 eval 另外調：範圍外最高 5.6、範圍內應命中段落最低 10.6，取中間
-MIN_SCORES = {FALLBACK: 8.0, BM25_ONLY: 8.0}
+# 混合檢索的 BM25 門檻先沿用純 BM25 的值，待用 eval 調整
+MIN_SCORES = {HYBRID: 8.0, FALLBACK: 8.0, BM25_ONLY: 8.0}
+
+# 混合檢索的向量相似度門檻。初始值，待用 eval 調整（範圍外 2 題不撞到段落）
+MIN_SIMILARITY = 0.40
+
+RRF_K = 60  # RRF 的常數，常用值
+COLLECTION = "chunks"
 
 
 class RAG:
-    def __init__(self, kb_dir: str | Path = "kb", top_k: int = 4, mode: str = FALLBACK, min_score: float | None = None):
+    def __init__(
+        self,
+        kb_dir: str | Path = "kb",
+        top_k: int = 4,
+        mode: str = HYBRID,
+        min_score: float | None = None,
+        min_similarity: float = MIN_SIMILARITY,
+        embedder: Embedder | None = None,
+        vector_dir: str | Path | None = None,
+    ):
         if mode not in MODES:
             raise ValueError(f"不支援的檢索模式：{mode}")
         self.chunks = load_chunks(Path(kb_dir))
         # 章節標題重複一次，加重權重
-        self.index = BM25([tokenize(f"{c.doc} {c.section} {c.section} {c.text}") for c in self.chunks])
+        self.index = BM25([tokenize(f"{c.section} {c.embed_text}") for c in self.chunks])
         self.mode = mode
         self.top_k = top_k
         self.min_score = MIN_SCORES[mode] if min_score is None else min_score
+        self.min_similarity = min_similarity
+        if mode == HYBRID:
+            self.embedder = embedder or OpenAIEmbedder()
+            # 向量庫資料夾預設放在知識庫旁邊，不進版控
+            self.store = QdrantClient(path=str(vector_dir or Path(kb_dir).parent / "vector_store"))
+            self._build_vectors()
 
-    def retrieve(self, query: str) -> list[tuple[Chunk, float]]:
+    def _build_vectors(self) -> None:
+        """每次啟動全部重算（增量更新另一張 ticket 做）。"""
+        vectors = self.embedder.embed([c.embed_text for c in self.chunks])
+        if self.store.collection_exists(COLLECTION):
+            self.store.delete_collection(COLLECTION)
+        self.store.create_collection(COLLECTION, vectors_config=VectorParams(size=len(vectors[0]), distance=Distance.COSINE))
+        self.store.upsert(
+            COLLECTION,
+            points=[
+                PointStruct(id=str(uuid.uuid5(uuid.NAMESPACE_URL, c.key)), vector=v, payload={"index": i, "key": c.key})
+                for i, (c, v) in enumerate(zip(self.chunks, vectors))
+            ],
+        )
+
+    def _bm25(self, query: str) -> list[tuple[int, float]]:
+        """過門檻的段落（段落編號, 分數），分數高的在前。"""
+        scores = self.index.scores(tokenize(query))
+        ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+        return [(i, s) for i, s in ranked if s >= self.min_score]
+
+    def _vector(self, query: str) -> list[tuple[int, float]]:
+        """過門檻的段落（段落編號, 相似度），相似度高的在前。"""
+        vec = self.embedder.embed([query])[0]
+        points = self.store.query_points(COLLECTION, query=vec, limit=len(self.chunks)).points
+        return [(p.payload["index"], p.score) for p in points if p.score >= self.min_similarity]
+
+    def _hybrid(self, query: str) -> list[Hit]:
+        """兩邊各自過門檻，過其中一邊就進入 RRF 合併；排序只依兩邊的排名。"""
+        sims, bm25s = dict(self._vector(query)), dict(self._bm25(query))
+        rrf: dict[int, float] = {}
+        for ranked in (sims, bm25s):
+            for rank, i in enumerate(ranked, 1):
+                rrf[i] = rrf.get(i, 0.0) + 1 / (RRF_K + rank)
+        top = sorted(rrf, key=rrf.get, reverse=True)[: self.top_k]
+        return [Hit(self.chunks[i], similarity=sims.get(i), bm25=bm25s.get(i)) for i in top]
+
+    def retrieve(self, query: str) -> list[Hit]:
+        if self.mode == HYBRID:
+            return self._hybrid(query)
         if self.mode == FALLBACK:
             query = expand_query(query)
-        scores = self.index.scores(tokenize(query))
-        ranked = sorted(zip(self.chunks, scores), key=lambda x: x[1], reverse=True)
-        return [(c, s) for c, s in ranked[: self.top_k] if s >= self.min_score]
+        return [Hit(self.chunks[i], bm25=s) for i, s in self._bm25(query)[: self.top_k]]
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
         history = history or []
@@ -192,7 +275,7 @@ class RAG:
         if not llm.enabled():
             return self._fallback(hits)
 
-        context = "\n\n".join(f"【{i}】{c.label}\n{c.text}" for i, (c, _) in enumerate(hits, 1)) or "（沒有找到相關資料）"
+        context = "\n\n".join(f"【{i}】{h.chunk.label}\n{h.chunk.text}" for i, h in enumerate(hits, 1)) or "（沒有找到相關資料）"
         messages = []
         for q, a in history[-3:]:
             messages += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
@@ -201,14 +284,14 @@ class RAG:
         raw = llm.chat(SYSTEM_PROMPT, messages)
         used = sorted({int(n) for n in re.findall(r"【(\d+)】", raw) if 0 < int(n) <= len(hits)})
         text = re.sub(r"\s*【\d+】", "", raw).strip()
-        return Answer(text, [hits[n - 1][0] for n in used], hits)
+        return Answer(text, [hits[n - 1].chunk for n in used], hits)
 
     @staticmethod
-    def _fallback(hits: list[tuple[Chunk, float]]) -> Answer:
+    def _fallback(hits: list[Hit]) -> Answer:
         """沒有設定 LLM 時，直接回最相關的段落，方便先測試檢索。"""
         if not hits:
             return Answer("這個問題我目前查不到相關資料，建議撥打 24 小時客服專線 (02) 2999-8888。", [], hits)
-        top = hits[0][0]
+        top = hits[0].chunk
         return Answer(f"（尚未設定 LLM，以下為最相關的段落）\n\n{top.text}", [top], hits)
 
 
