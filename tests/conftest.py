@@ -2,6 +2,7 @@
 import hashlib
 import math
 import random
+import threading
 import time
 from pathlib import Path
 
@@ -59,4 +60,30 @@ class BreakableEmbedder(FakeEmbedder):
             raise RuntimeError("Embedding API 錯誤 429")
         if self.broken == "slow":
             time.sleep(5)
+        return super().embed(texts)
+
+
+class BrokenAtStartup(FakeEmbedder):
+    """啟動重算時報錯（模擬沒網路），之後把 broken 設成 False 就恢復正常。"""
+
+    def __init__(self, rules: dict[str, int]):
+        super().__init__(rules)
+        self.broken = True
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if self.broken:
+            raise ConnectionError("沒網路")
+        return super().embed(texts)
+
+
+class GatedAfterStartup(BrokenAtStartup):
+    """啟動時報錯；恢復後，建庫（一次送多段）會卡到 gate 打開為止，模擬網路很慢。"""
+
+    def __init__(self, rules: dict[str, int]):
+        super().__init__(rules)
+        self.gate = threading.Event()
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not self.broken and len(texts) > 1:
+            self.gate.wait(10)
         return super().embed(texts)
