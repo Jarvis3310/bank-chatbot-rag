@@ -269,7 +269,7 @@ class RAG:
         hits = self.retrieve(query)
 
         if not llm.enabled():
-            return self._fallback(hits)
+            return self._answer_without_llm(hits)
 
         context = "\n\n".join(f"【{i}】{h.chunk.label}\n{h.chunk.text}" for i, h in enumerate(hits, 1)) or "（沒有找到相關資料）"
         messages = []
@@ -283,7 +283,7 @@ class RAG:
         return Answer(text, [hits[n - 1].chunk for n in used], hits)
 
     @staticmethod
-    def _fallback(hits: list[Hit]) -> Answer:
+    def _answer_without_llm(hits: list[Hit]) -> Answer:
         """沒有設定 LLM 時，直接回最相關的段落，方便先測試檢索。"""
         if not hits:
             return Answer("這個問題我目前查不到相關資料，建議撥打 24 小時客服專線 (02) 2999-8888。", [], hits)
