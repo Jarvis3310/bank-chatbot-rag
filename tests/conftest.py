@@ -9,8 +9,9 @@ from pathlib import Path
 KB = Path(__file__).resolve().parent.parent / "kb"
 DIM = 32
 
-# 「幾點開門」要靠同義詞表才對得到「營業時間」：找得到就代表用的是退回模式
-FALLBACK_Q = "你們幾點開門？"
+# 「日幣」要靠同義詞表才對得到「外幣帳戶開戶」，BM25 分數又不到混合檢索的門檻：找得到就代表用的是退回模式
+FALLBACK_Q = "我想存日幣"
+FALLBACK_SECTION = "外幣帳戶開戶"
 
 
 class FakeEmbedder:
@@ -19,8 +20,10 @@ class FakeEmbedder:
     含同一組關鍵字的文字相似度接近 1，其他文字之間接近 0。
     """
 
-    def __init__(self, rules: dict[str, int]):
+    def __init__(self, rules: dict[str, int], model: str = "fake", dim: int = DIM):
         self.rules = rules
+        self.model = model
+        self.dim = dim
         self.calls: list[str] = []
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -29,7 +32,7 @@ class FakeEmbedder:
 
     def _vector(self, text: str) -> list[float]:
         rnd = random.Random(hashlib.sha256(text.encode()).digest())
-        vec = [rnd.gauss(0, 0.05) for _ in range(DIM)]
+        vec = [rnd.gauss(0, 0.05) for _ in range(self.dim)]
         for keyword, dim in self.rules.items():
             if keyword in text:
                 vec[dim] += 1.0

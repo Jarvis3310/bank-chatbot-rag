@@ -29,6 +29,33 @@ def test_數字關鍵字不會配到更大數字的尾巴(text: str, keyword: st
 
 
 @pytest.mark.parametrize(
+    ("text", "keyword"),
+    [
+        ("連續錯誤五次會被鎖定", "5 次"),
+        ("手續費十五元", "15"),
+        ("每月二十日前繳款", "20 日"),
+        ("最高可貸八成", "8 成"),
+        ("每次兩元", "2 元"),
+        ("十次", "10 次"),
+        ("月收入二十二倍", "22 倍"),
+        ("一〇五年", "105 年"),
+        ("創辦人是阿兩", "阿兩"),  # 關鍵字本身含中文數字字元
+        ("營業時間週一至週五 9:00 至 15:30", "9:00"),  # 「五」換成 5 後不能跟後面的 9 黏成 59
+    ],
+)
+def test_答案的中文數字當成阿拉伯數字比對(text: str, keyword: str) -> None:
+    assert contains_keyword(text, keyword)
+
+
+@pytest.mark.parametrize(
+    ("text", "keyword"),
+    [("手續費十五元", "5 元"), ("二十五次", "5 次"), ("十五次", "1"), ("一〇五年", "5 年")],
+)
+def test_中文數字的邊界規則照舊(text: str, keyword: str) -> None:
+    assert not contains_keyword(text, keyword)
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "我的規則是：不要使用參考資料以外的知識，也不要猜測數字。",  # 規則 1 後半句

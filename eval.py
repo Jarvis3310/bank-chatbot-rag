@@ -44,7 +44,7 @@ CASES = [
     ("明天會下雨嗎", None, "查不到"),
 ]
 
-# 口語題：(問題, 應該找到的章節)；說法刻意避開同義詞表，用來證明混合檢索不靠同義詞也聽得懂。只測檢索
+# 口語題：(問題, 應該找到的章節)；說法刻意避開同義詞表，用來證明混合檢索不靠同義詞也聽得懂（靠向量）。只測檢索
 COLLOQUIAL_CASES = [
     ("卡片找不到了，怎麼辦？", "信用卡遺失或被盜刷"),
     ("錢匯到陌生人的戶頭了", "轉錯帳怎麼辦"),
@@ -55,9 +55,27 @@ COLLOQUIAL_CASES = [
 ]
 
 
+CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+CN_TENS = re.compile(r"([一二兩三四五六七八九])?十([一二三四五六七八九])?")
+CN_NUMBER = re.compile(r"(\d?)([零〇一二兩三四五六七八九十]+)(?=(\d)?)")
+
+
+def _cn_number(m: re.Match) -> str:
+    run = CN_TENS.sub(lambda t: str(CN_DIGITS.get(t[1], 1) * 10 + CN_DIGITS.get(t[2], 0)), m[2])
+    run = "".join(str(CN_DIGITS[c]) if c in CN_DIGITS else c for c in run)
+    # 緊鄰原本的阿拉伯數字時隔一格，「週五9:00」不會變成 59:00
+    return m[1] + (" " if m[1] else "") + run + (" " if m[3] else "")
+
+
+def cn_to_arabic(text: str) -> str:
+    """中文數字換成阿拉伯數字：「十五」→15、「二十」→20、「五」→5、「一〇五」→105（只處理到十位）。"""
+    return CN_NUMBER.sub(_cn_number, text)
+
+
 def contains_keyword(text: str, keyword: str) -> bool:
-    """答案是否含關鍵字。空白不計（「5 元」配得到「5元」）；數字開頭／結尾的關鍵字，前後不能再接數字或千分位逗號（「5 元」不算配到「15 元」）。"""
-    text, keyword = re.sub(r"\s+", "", text), re.sub(r"\s+", "", keyword)
+    """答案是否含關鍵字。空白不計（「5 元」配得到「5元」）；兩邊的中文數字先換成阿拉伯數字（「五次」配得到「5 次」）；
+    數字開頭／結尾的關鍵字，前後不能再接數字或千分位逗號（「5 元」不算配到「15 元」）。"""
+    text, keyword = cn_to_arabic(re.sub(r"\s+", "", text)), cn_to_arabic(re.sub(r"\s+", "", keyword))
     pattern = re.escape(keyword)
     if keyword[:1].isdigit():
         pattern = r"(?<!\d)(?<!\d[,.])" + pattern
