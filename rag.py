@@ -154,15 +154,31 @@ class Answer:
     retrieved: list[tuple[Chunk, float]]
 
 
+# 檢索模式：退回模式（BM25＋同義詞，預設）、純 BM25（不加同義詞，eval 對照組）
+FALLBACK = "fallback"
+BM25_ONLY = "bm25"
+MODES = (FALLBACK, BM25_ONLY)
+
+# 各模式的分數門檻，低於門檻的段落不回傳（範圍外的問題就會得到空結果）。
+# 純 BM25 的值用 eval 另外調：範圍外最高 5.6、範圍內應命中段落最低 10.6，取中間
+MIN_SCORES = {FALLBACK: 8.0, BM25_ONLY: 8.0}
+
+
 class RAG:
-    def __init__(self, kb_dir: str | Path = "kb", top_k: int = 4, min_score: float = 8.0):
+    def __init__(self, kb_dir: str | Path = "kb", top_k: int = 4, mode: str = FALLBACK, min_score: float | None = None):
+        if mode not in MODES:
+            raise ValueError(f"不支援的檢索模式：{mode}")
         self.chunks = load_chunks(Path(kb_dir))
         # 章節標題重複一次，加重權重
         self.index = BM25([tokenize(f"{c.doc} {c.section} {c.section} {c.text}") for c in self.chunks])
-        self.top_k, self.min_score = top_k, min_score
+        self.mode = mode
+        self.top_k = top_k
+        self.min_score = MIN_SCORES[mode] if min_score is None else min_score
 
     def retrieve(self, query: str) -> list[tuple[Chunk, float]]:
-        scores = self.index.scores(tokenize(expand_query(query)))
+        if self.mode == FALLBACK:
+            query = expand_query(query)
+        scores = self.index.scores(tokenize(query))
         ranked = sorted(zip(self.chunks, scores), key=lambda x: x[1], reverse=True)
         return [(c, s) for c, s in ranked[: self.top_k] if s >= self.min_score]
 

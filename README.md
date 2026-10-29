@@ -14,7 +14,8 @@ LINE / 網頁 ──► app.py ──► rag.py：檢索最相關的 4 段 ─�
 | `rag.py` | 切段、中文檢索（BM25，不需 embedding）、組 prompt、解析出處 |
 | `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
-| `eval.py` | 16 題評測：檢索是否命中正確段落、答案是否含關鍵數字 |
+| `eval.py` | 16 題評測：退回模式、純 BM25 兩欄的檢索命中，以及答案是否含關鍵數字 |
+| `tests/` | 單元測試，執行 `python -m pytest` |
 
 ---
 
