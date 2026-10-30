@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 # 向量相似度門檻。#13 實驗（large＋同義詞＋生成問法）網格搜尋的推薦值，只用原本的題組調，驗證題組不參與
 MIN_SIMILARITY = 0.38
-QUERY_TIMEOUT = 3.0  # 問題的 embedding 超過幾秒就放棄
+QUERY_TIMEOUT = 2.0  # 問題的 embedding 超過幾秒就放棄（spec 上限是 3 秒，留一秒給 Docker 實測發現的額外延遲）
 COOLDOWN = 60.0  # 失敗後幾秒內不再試
 RETRY_POLL = 1.0  # 退回期間，背景每隔幾秒（真實時間）看一次冷卻到了沒
 CLOSE_TIMEOUT = 5.0  # close 最多等背景補建幾秒（embedding 卡住時不無限等）

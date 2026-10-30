@@ -92,14 +92,14 @@ def test_知識庫拿掉的段落從向量庫移除(tmp_path: Path) -> None:
     assert all(sim < 0.9 for _, sim in hits)
 
 
-def test_查詢embedding卡住時3秒內回None(tmp_path: Path) -> None:
+def test_查詢embedding卡住時2秒多就回None(tmp_path: Path) -> None:
     embedder = BreakableEmbedder()
     index = VectorIndex(CHUNKS, embedder, tmp_path)
     embedder.broken = "slow"
 
     t0 = time.monotonic()
     assert index.search(FEE_Q) is None
-    assert time.monotonic() - t0 < 3.5
+    assert time.monotonic() - t0 < 2.5
 
 
 def test_查詢失敗後冷卻60秒內不再試(tmp_path: Path) -> None:
