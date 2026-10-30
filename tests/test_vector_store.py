@@ -127,3 +127,21 @@ def test_建庫失敗後冷卻時間到_背景補建期間發問立刻用退回�
     finally:
         embedder.gate.set()
         rag.close()
+
+
+def test_第一次啟動就斷網_網路恢復後沒人發問也在60秒後自動回到混合檢索(tmp_path: Path) -> None:
+    embedder, clock = BrokenAtStartup({"跨行轉帳手續費": 0, "ATM 跨行": 0}), FakeClock()
+    rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors", clock=clock)
+    try:
+        assert rag.retrieve("用 ATM 跨行轉帳要多少手續費")[0].similarity is None  # 斷網：退回模式
+
+        embedder.broken = False
+        clock.now += 60
+        deadline = time.monotonic() + 5  # 這段時間不發問，等背景自己補建
+        while not rag.vectors.has_vectors and time.monotonic() < deadline:
+            time.sleep(0.05)
+
+        hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+        assert hits[0].chunk.section == "跨行轉帳手續費" and hits[0].similarity > 0.9
+    finally:
+        rag.close()

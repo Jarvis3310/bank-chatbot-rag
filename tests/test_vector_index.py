@@ -169,8 +169,69 @@ def start_gated_rebuild(tmp_path: Path) -> tuple[VectorIndex, GatedAfterStartup,
     index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
     embedder.broken = False
     clock.now += 60
-    assert index.search(FEE_Q) is None
+    assert embedder.waiting.wait(5)  # 沒人發問，背景自己開始補建
     return index, embedder, clock
+
+
+def wait_until(condition) -> bool:
+    deadline = time.monotonic() + 5
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return condition()
+
+
+def test_建庫失敗後沒人發問_冷卻時間到背景自動補建(tmp_path: Path) -> None:
+    embedder, clock = BrokenAtStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
+    embedder.broken = False
+    try:
+        clock.now += 59
+        time.sleep(0.3)
+        assert not index.has_vectors  # 冷卻中不重試
+
+        clock.now += 1.5
+        assert wait_until(lambda: index.has_vectors)  # 全程沒有呼叫 search
+        assert section_of(index.search(FEE_Q)) == "跨行轉帳手續費"
+    finally:
+        index.close()
+
+
+def test_背景重試又失敗時再隔60秒重試_同一時間最多一個(tmp_path: Path) -> None:
+    embedder, clock = GatedAfterStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
+    embedder.broken = False
+    try:
+        clock.now += 60
+        assert embedder.waiting.wait(5)  # 第一次重試開始，卡在 gate
+        clock.now += 600  # 重試還沒結束，再久也不會再開第二個
+        time.sleep(0.3)
+        assert embedder.batches == 2  # 啟動那次加上正在卡住的這次，沒有第三次
+        embedder.broken = True
+        embedder.gate.set()  # 第一次重試失敗（gate 之後 embedding 報錯）
+        assert wait_until(lambda: index.sync_failed_at == clock.now)
+
+        embedder.broken = False
+        calls = len(embedder.calls)
+        clock.now += 59
+        time.sleep(0.3)
+        assert len(embedder.calls) == calls  # 失敗後重新計 60 秒
+
+        clock.now += 1.5
+        assert wait_until(lambda: index.has_vectors)
+    finally:
+        embedder.gate.set()
+        index.close()
+
+
+def test_沒有失敗時close不會被背景重試卡住(tmp_path: Path) -> None:
+    embedder, clock = BrokenAtStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)  # 失敗，背景正在等冷卻
+
+    t0 = time.monotonic()
+    index.close()
+
+    assert time.monotonic() - t0 < 1.0
+    assert not index.rebuilding.is_alive()
 
 
 def test_補建中close會等補建結束_不拋例外也不印錯誤_之後不再補建(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

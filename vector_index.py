@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 MIN_SIMILARITY = 0.38
 QUERY_TIMEOUT = 3.0  # 問題的 embedding 超過幾秒就放棄
 COOLDOWN = 60.0  # 失敗後幾秒內不再試
+RETRY_POLL = 1.0  # 退回期間，背景每隔幾秒（真實時間）看一次冷卻到了沒
 CLOSE_TIMEOUT = 5.0  # close 最多等背景補建幾秒（embedding 卡住時不無限等）
 GEN_WORKERS = 8  # 生成問法時同時送幾個請求（每段一個請求，逐段送第一次建庫要等很久）
 COLLECTION = "chunks"
@@ -88,13 +89,16 @@ class VectorIndex:
         self.search_failed_at: float | None = None
         self.sync_failed_at: float | None = None
         self.has_vectors = False
-        self.rebuilding: threading.Thread | None = None
-        self.closed = False  # 關閉後不再查詢、補建，背景補建也不再寫入
+        self.rebuilding: threading.Thread | None = None  # 退回期間的背景重試執行緒，最多一個
+        self.closed = threading.Event()  # 關閉後不再查詢、補建，背景重試也不再寫入，並立刻叫醒等待中的重試
         self._sync()
+        if self.sync_failed_at is not None:  # 建庫或補建失敗：不必等人發問，背景每 COOLDOWN 秒自動重試
+            self.rebuilding = threading.Thread(target=self._retry_loop, daemon=True)
+            self.rebuilding.start()
 
     def close(self) -> None:
-        """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。先等背景補建結束，最多 CLOSE_TIMEOUT 秒。"""
-        self.closed = True
+        """釋放向量庫資料夾的鎖（Qdrant 本機模式同一時間只能有一個程式打開）。先等背景重試結束，最多 CLOSE_TIMEOUT 秒。"""
+        self.closed.set()
         if self.rebuilding is not None:
             self.rebuilding.join(CLOSE_TIMEOUT)
         with self.lock:
@@ -102,17 +106,11 @@ class VectorIndex:
 
     def search(self, query: str) -> list[tuple[int, float]] | None:
         """過門檻的段落（段落編號, 相似度），相似度高的在前；向量檢索用不了時回 None。"""
-        if self.closed:
+        if self.closed.is_set():
             return None
         # 失敗後冷卻一段時間不再試，避免斷網時每題都多等 QUERY_TIMEOUT 秒
         if self.search_failed_at is not None and self.clock() - self.search_failed_at < COOLDOWN:
             return None
-        # 同步失敗過：冷卻時間到就重試。strict 同步重試、失敗就報錯；平常在背景補建，不讓這一題等
-        if self.sync_failed_at is not None and self.clock() - self.sync_failed_at >= COOLDOWN:
-            if self.strict:
-                self._sync()
-            else:
-                self._sync_in_background()
         if not self.has_vectors:
             if self.strict:  # 向量庫全空：eval 要報錯，不拿退回模式的分數冒充混合檢索
                 raise RuntimeError("向量庫是空的，沒有任何段落的向量")
@@ -136,7 +134,7 @@ class VectorIndex:
         問法生成失敗的段落先只用段落算向量，同樣冷卻後重試。
         """
         questions, failed = self._questions()
-        if self.closed:
+        if self.closed.is_set():
             return
         current = []
         for i, c in enumerate(self.chunks):
@@ -145,7 +143,7 @@ class VectorIndex:
         model = self.embedder.model
         stored: dict[str, str] = {}  # point id → hash
         with self.lock:
-            if self.closed:
+            if self.closed.is_set():
                 return
             if self.store.collection_exists(COLLECTION):
                 models: set[str | None] = set()
@@ -175,7 +173,7 @@ class VectorIndex:
             try:
                 vectors = self.embedder.embed([pt.text for pt in todo])
             except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
-                if self.closed:
+                if self.closed.is_set():
                     return
                 degrade(self.strict, f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：", e)
                 stale += [pt.id for pt in todo if pt.id in stored]
@@ -183,7 +181,7 @@ class VectorIndex:
         self.sync_failed_at = self.clock() if failed else None
 
         with self.lock:
-            if self.closed:  # 等 embedding 時服務已關閉
+            if self.closed.is_set():  # 等 embedding 時服務已關閉
                 return
             if vectors:
                 if not self.store.collection_exists(COLLECTION):
@@ -219,7 +217,7 @@ class VectorIndex:
         # 段落刪除或改名後，舊 key 的問法留著沒用，重建時一併移除
         keys = {c.key for c in self.chunks}
         stale = [k for k in saved if k not in keys]
-        if stale and self.questions_path is not None and not self.closed:
+        if stale and self.questions_path is not None and not self.closed.is_set():
             for k in stale:
                 del saved[k]
             save_questions(self.questions_path, saved)
@@ -227,7 +225,7 @@ class VectorIndex:
             return found, False
 
         generated, error = self._generate(todo)  # 不鎖向量庫，補建期間其他問題照常查詢
-        if self.closed:
+        if self.closed.is_set():
             return found, False
         if generated and self.questions_path is not None:
             for c in todo:
@@ -255,22 +253,22 @@ class VectorIndex:
             list(pool.map(run, todo))
         return results, errors[0] if errors else None
 
-    def _sync_in_background(self) -> None:
-        """在背景補建向量（同一時間最多一個），這一題不等它，照當下的向量庫回答。"""
-        if self.rebuilding is not None and self.rebuilding.is_alive():
-            return
-        self.sync_failed_at = None  # 補建中不再觸發；失敗時 _sync 會重新記下時間
+    def _retry_loop(self) -> None:
+        """背景重試：失敗後每隔 COOLDOWN 秒（用注入的時鐘算）重新同步，直到成功或關閉。
 
-        def run() -> None:
+        整個迴圈只有這一條執行緒，所以同一時間最多一個重試；重試期間查詢照常（退回模式）。
+        每 RETRY_POLL 秒（真實時間）檢查一次冷卻到了沒，close 會立刻叫醒它。
+        """
+        while self.sync_failed_at is not None and not self.closed.wait(RETRY_POLL):
+            if self.clock() - self.sync_failed_at < COOLDOWN:
+                continue
             try:
-                self._sync()
-            except Exception as e:  # noqa: BLE001 — 背景補建的錯誤不能影響服務
-                if not self.closed:
-                    print("背景補建向量失敗：", repr(e))
-                    self.sync_failed_at = self.clock()
-
-        self.rebuilding = threading.Thread(target=run, daemon=True)
-        self.rebuilding.start()
+                self._sync()  # 成功會清掉 sync_failed_at、結束迴圈；失敗會重新記下時間
+            except Exception as e:  # noqa: BLE001 — 背景重試的錯誤不能影響服務
+                if self.closed.is_set():
+                    return
+                print("背景補建向量失敗：", repr(e))
+                self.sync_failed_at = self.clock()
 
     def _embed_query(self, query: str) -> list[float]:
         """問題的 embedding，超過 QUERY_TIMEOUT 秒就放棄（卡住的請求留在背景執行緒自己結束）。"""

@@ -6,8 +6,19 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
+import vector_index
+
 KB = Path(__file__).resolve().parent.parent / "kb"
 DIM = 32
+
+
+@pytest.fixture(autouse=True)
+def fast_retry_poll(monkeypatch: pytest.MonkeyPatch) -> None:
+    """背景重試平常每秒看一次冷卻到了沒，測試縮短，不必多等。"""
+    monkeypatch.setattr(vector_index, "RETRY_POLL", 0.05)
+
 
 # 「日幣」要靠同義詞表才對得到「外幣帳戶開戶」，BM25 分數又不到混合檢索的門檻：找得到就代表用的是退回模式
 FALLBACK_Q = "我想存日幣"
@@ -101,8 +112,12 @@ class GatedAfterStartup(BrokenAtStartup):
     def __init__(self, rules: dict[str, int]):
         super().__init__(rules)
         self.gate = threading.Event()
+        self.waiting = threading.Event()  # 建庫已經送出、正卡在 gate
+        self.batches = 0  # 建庫（一次送多段）嘗試了幾次，含啟動時失敗的那次
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        self.batches += len(texts) > 1
         if not self.broken and len(texts) > 1:
+            self.waiting.set()
             self.gate.wait(10)
         return super().embed(texts)
