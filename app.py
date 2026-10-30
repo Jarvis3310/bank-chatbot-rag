@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import atexit
 import base64
 import hashlib
 import hmac
@@ -42,6 +43,14 @@ def get_rag() -> RAG:
         if rag is None:
             rag = RAG(BASE / "kb")
         return rag
+
+
+@atexit.register
+def close_rag() -> None:
+    """程式結束前關閉向量庫，否則 Python 結束時 Qdrant 才關，會印「Python is likely shutting down」。沒用過就不建立。"""
+    with _rag_lock:
+        if rag is not None:
+            rag.close()
 
 # 每位使用者保留最近 3 輪對話，讓追問接得上（重啟後清空）
 histories: dict[str, deque] = defaultdict(lambda: deque(maxlen=3))

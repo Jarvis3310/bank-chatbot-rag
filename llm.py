@@ -18,6 +18,8 @@ DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
 }
 TIMEOUT = 40
+# 各家共用。OpenAI 預設 1.0，同一題每次回答差很多（曾漏提「連續錯 5 次」）；客服回答要一致，調低
+TEMPERATURE = 0.2
 
 
 def provider() -> str:
@@ -45,6 +47,7 @@ def chat(system: str, messages: list[dict]) -> str:
             {
                 "model": os.getenv("LLM_MODEL") or DEFAULT_MODELS["anthropic"],
                 "max_tokens": 800,
+                "temperature": TEMPERATURE,
                 "system": system,
                 "messages": messages,
             },
@@ -56,7 +59,7 @@ def chat(system: str, messages: list[dict]) -> str:
         data = _post(
             "https://api.openai.com/v1/chat/completions",
             {"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
-            {"model": os.getenv("LLM_MODEL") or DEFAULT_MODELS["openai"], "messages": full},
+            {"model": os.getenv("LLM_MODEL") or DEFAULT_MODELS["openai"], "messages": full, "temperature": TEMPERATURE},
         )
     elif p == "azure":
         endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
@@ -65,7 +68,7 @@ def chat(system: str, messages: list[dict]) -> str:
         data = _post(
             f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}",
             {"api-key": os.environ["AZURE_OPENAI_API_KEY"]},
-            {"messages": full},
+            {"messages": full, "temperature": TEMPERATURE},
         )
     else:
         raise ValueError(f"未知的 LLM_PROVIDER：{p}（可用：anthropic / openai / azure / none）")
