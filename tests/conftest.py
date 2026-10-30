@@ -66,6 +66,22 @@ class BreakableEmbedder(FakeEmbedder):
         return super().embed(texts)
 
 
+class FakeGenerator:
+    """假的問法生成器：問法由段落第一行決定。broken 設成 True 就報錯（模擬沒額度）。"""
+
+    def __init__(self, model: str = "fake-gen"):
+        self.model = model
+        self.broken = False
+        self.calls: list[str] = []
+
+    def generate(self, text: str) -> list[str]:
+        self.calls.append(text)
+        if self.broken:
+            raise RuntimeError("LLM API 錯誤 429")
+        title = text.splitlines()[0]
+        return [f"{title} 問法{n}" for n in (1, 2, 3)]
+
+
 class BrokenAtStartup(FakeEmbedder):
     """啟動重算時報錯（模擬沒網路），之後把 broken 設成 False 就恢復正常。"""
 

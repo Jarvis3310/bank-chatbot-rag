@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -18,15 +19,17 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from embedding import Embedder
+from questions import QuestionGenerator, load_questions, save_questions
 
 if TYPE_CHECKING:
     from rag import Chunk
 
-# 向量相似度門檻。eval（large）：範圍外最高 0.312、口語題應命中段落最低 0.414，0.32–0.41 都達標，取中間偏高
-MIN_SIMILARITY = 0.37
+# 向量相似度門檻。#13 實驗（large＋同義詞＋生成問法）網格搜尋的推薦值，只用原本的題組調，驗證題組不參與
+MIN_SIMILARITY = 0.38
 QUERY_TIMEOUT = 3.0  # 問題的 embedding 超過幾秒就放棄
 COOLDOWN = 60.0  # 失敗後幾秒內不再試
 CLOSE_TIMEOUT = 5.0  # close 最多等背景補建幾秒（embedding 卡住時不無限等）
+GEN_WORKERS = 8  # 生成問法時同時送幾個請求（每段一個請求，逐段送第一次建庫要等很久）
 COLLECTION = "chunks"
 
 
@@ -36,8 +39,13 @@ def point_id(chunk: Chunk) -> str:
 
 
 def chunk_hash(chunk: Chunk) -> str:
-    """拿去 embedding 的整段文字的指紋，內容一改就變。"""
+    """段落（文件標題＋章節標題＋內文）的指紋，內容一改就變；問法檔用它判斷問法還能不能沿用。"""
     return hashlib.sha256(chunk.embed_text.encode("utf-8")).hexdigest()
+
+
+def vector_text(chunk: Chunk, questions: list[str] | None) -> str:
+    """拿去算向量的文字：段落（文件標題＋章節標題＋內文），有生成問法就接在後面。"""
+    return f"{chunk.embed_text}\n" + "\n".join(questions) if questions else chunk.embed_text
 
 
 class Point(NamedTuple):
@@ -46,7 +54,8 @@ class Point(NamedTuple):
     id: str  # point id
     index: int  # 段落編號
     chunk: Chunk
-    hash: str
+    text: str  # 拿去算向量的文字（段落＋問法）
+    hash: str  # text 的指紋
 
 
 def degrade(strict: bool, message: str, e: Exception) -> None:
@@ -64,10 +73,14 @@ class VectorIndex:
         path: str | Path,
         clock: Callable[[], float] = time.monotonic,
         strict: bool = False,
+        generator: QuestionGenerator | None = None,  # None：不生成問法，只用段落算向量
+        questions_path: str | Path | None = None,  # 問法檔（進版控）；None：不讀也不寫，每次都重新生成
     ):
-        """打開向量庫並同步段落。向量庫被別的程式鎖住時丟例外；embedding 失敗不丟（strict 除外），冷卻後補建。"""
+        """打開向量庫並同步段落。向量庫被別的程式鎖住時丟例外；embedding 或問法生成失敗不丟（strict 除外），冷卻後補建。"""
         self.chunks = chunks
         self.embedder = embedder
+        self.generator = generator
+        self.questions_path = Path(questions_path) if questions_path is not None else None
         self.clock = clock
         self.strict = strict
         self.store = QdrantClient(path=str(path))
@@ -116,9 +129,17 @@ class VectorIndex:
     def _sync(self) -> None:
         """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落；embedding 模型換了就整庫重算。
 
+        hash 算的是「段落＋問法」，問法變了（生成模型換了、補生成成功）該段也會重算。
         重算失敗不丟例外：沒變的段落沿用舊向量，沒重算到的段落從向量庫移除，冷卻 COOLDOWN 秒後由下一題重試。
+        問法生成失敗的段落先只用段落算向量，同樣冷卻後重試。
         """
-        current = [Point(point_id(c), i, c, chunk_hash(c)) for i, c in enumerate(self.chunks)]
+        questions, failed = self._questions()
+        if self.closed:
+            return
+        current = []
+        for i, c in enumerate(self.chunks):
+            text = vector_text(c, questions.get(c.key))
+            current.append(Point(point_id(c), i, c, text, hashlib.sha256(text.encode("utf-8")).hexdigest()))
         model = self.embedder.model
         stored: dict[str, str] = {}  # point id → hash
         with self.lock:
@@ -150,15 +171,14 @@ class VectorIndex:
         vectors: list[list[float]] = []
         if todo:  # 算 embedding 時不鎖向量庫，補建期間其他問題照常查詢
             try:
-                vectors = self.embedder.embed([pt.chunk.embed_text for pt in todo])
+                vectors = self.embedder.embed([pt.text for pt in todo])
             except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
                 if self.closed:
                     return
                 degrade(self.strict, f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：", e)
                 stale += [pt.id for pt in todo if pt.id in stored]
-                self.sync_failed_at = self.clock()
-            else:
-                self.sync_failed_at = None
+                failed = True
+        self.sync_failed_at = self.clock() if failed else None
 
         with self.lock:
             if self.closed:  # 等 embedding 時服務已關閉
@@ -176,6 +196,55 @@ class VectorIndex:
             if stale:
                 self.store.delete(COLLECTION, points_selector=stale)
             self.has_vectors = self.store.collection_exists(COLLECTION) and self.store.count(COLLECTION).count > 0
+
+    def _questions(self) -> tuple[dict[str, list[str]], bool]:
+        """每段的問法（段落 key → 問法）與是否有段落生成失敗。
+
+        問法檔裡段落 hash 與生成模型都相符就直接用；不符或缺少才生成，成功的寫回問法檔，失敗的不寫。
+        """
+        if self.generator is None:
+            return {}, False
+        model = self.generator.model
+        saved = load_questions(self.questions_path) if self.questions_path is not None else {}
+        found: dict[str, list[str]] = {}
+        todo: list[Chunk] = []
+        for c in self.chunks:
+            entry = saved.get(c.key)
+            if entry is not None and entry.get("hash") == chunk_hash(c) and entry.get("model") == model:
+                found[c.key] = entry["questions"]
+            else:
+                todo.append(c)
+        if not todo:
+            return found, False
+
+        generated, error = self._generate(todo)  # 不鎖向量庫，補建期間其他問題照常查詢
+        if self.closed:
+            return found, False
+        if generated and self.questions_path is not None:
+            for c in todo:
+                if c.key in generated:
+                    saved[c.key] = {"hash": chunk_hash(c), "model": model, "questions": generated[c.key]}
+            save_questions(self.questions_path, saved)
+        found.update(generated)
+        if error is not None:
+            degrade(self.strict, f"問法生成失敗，{len(todo) - len(generated)} 段先只用段落算向量：", error)
+        return found, error is not None
+
+    def _generate(self, todo: list[Chunk]) -> tuple[dict[str, list[str]], Exception | None]:
+        """每段各生成一次問法（同時送 GEN_WORKERS 個請求）。回傳成功的段落（段落 key → 問法）與第一個錯誤。"""
+        assert self.generator is not None
+        results: dict[str, list[str]] = {}
+        errors: list[Exception] = []
+
+        def run(chunk: Chunk) -> None:
+            try:
+                results[chunk.key] = self.generator.generate(chunk.embed_text)
+            except Exception as e:  # noqa: BLE001 — 失敗的段落先只用段落算向量
+                errors.append(e)
+
+        with ThreadPoolExecutor(GEN_WORKERS) as pool:
+            list(pool.map(run, todo))
+        return results, errors[0] if errors else None
 
     def _sync_in_background(self) -> None:
         """在背景補建向量（同一時間最多一個），這一題不等它，照當下的向量庫回答。"""

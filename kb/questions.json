@@ -1,0 +1,335 @@
+{
+  "01_account.md#帳戶久未使用（靜止戶）": {
+    "hash": "2021d20d840ace7f8477b55210cb4a3fc90837edbd9650ce6ca439119edb9871",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我的帳戶好像很久沒用，會怎樣呢？",
+      "如果我的帳戶沒有交易會被鎖住嗎？",
+      "我該怎麼辦才能重新使用我的靜止戶？"
+    ]
+  },
+  "01_account.md#結清（銷戶）": {
+    "hash": "ee107271eaa05a1d74680821cf00fb8356bc391db44117a13bd5b8d33e16755c",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道怎麼關掉我的銀行帳戶，需不需要帶什麼東西？",
+      "如果我想結束帳戶，還有什麼要注意的嗎？",
+      "我該怎麼做才能把我的帳戶關掉？"
+    ]
+  },
+  "01_account.md#線上開立數位帳戶": {
+    "hash": "bee6b4c46907678bc6f3ef921a28aa60544895f083fda23436ebcd191258c2e1",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我可以在手機上開數位帳戶嗎？",
+      "開戶需要帶什麼文件呢？",
+      "數位帳戶有什麼手續費優惠嗎？"
+    ]
+  },
+  "01_account.md#臨櫃開立台幣存款帳戶需要帶什麼": {
+    "hash": "562c36d6fb1ab6a9d319d529f1d427c0710e0bf1d8c2e4bd3a5a41931ee3b8dc",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想開台幣存款帳戶，去銀行要帶什麼東西呢？",
+      "如果我滿18歲，開戶的時候需要準備哪些證件？",
+      "未滿18歲的話，開戶需要帶誰去？"
+    ]
+  },
+  "01_account.md#變更通訊地址、電話或 Email": {
+    "hash": "cf26c3366cab1a46d16828a904c03e77e8e249ab69bf0943a55f65f2b121baa5",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想改我的聯絡地址和電話，怎麼做呢？",
+      "請問我可以在線上修改我的基本資料嗎？",
+      "如果我換了手機，怎麼更新我的聯絡方式？"
+    ]
+  },
+  "02_transfer_fees.md#無卡提款": {
+    "hash": "cd0d41bf2425674a955b960bebcdc074efae6aa9a232181cb786d8e7f527430a",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道怎麼用行動銀行提領現金，沒有卡片的話怎麼辦？",
+      "無卡提款的流程是什麼？我需要注意什麼？",
+      "我可以在 ATM 提款的金額有什麼限制嗎？"
+    ]
+  },
+  "02_transfer_fees.md#跨行提款手續費": {
+    "hash": "bdd5a7262a9257c08920d2cbd5bfe4134e199b6d8a2feb7a4a1d711e2ea2dc51",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我在別的銀行的 ATM 提款要付多少手續費？",
+      "數位帳戶有沒有跨行提款的優惠？",
+      "如果我在國外提款，會有什麼額外費用嗎？"
+    ]
+  },
+  "02_transfer_fees.md#跨行轉帳手續費": {
+    "hash": "036d5246751fc7d682919d262c7494bc5b309b36cc98dee5e05b1e429d7bda84",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "跨行轉帳要收多少手續費啊？",
+      "如果我用ATM轉帳，會不會很貴？",
+      "網路銀行轉帳有沒有免費的選項？"
+    ]
+  },
+  "02_transfer_fees.md#轉帳限額": {
+    "hash": "b2ee4f0c0981cc2464d6bd2617a983240c00e200d9ae14b9ccde5b9c2ed2bdc5",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道轉帳的金額限制是怎樣的？",
+      "請問我可以一次轉多少錢？",
+      "非約定轉帳的上限是多少呢？"
+    ]
+  },
+  "02_transfer_fees.md#轉錯帳怎麼辦": {
+    "hash": "ebba3145a155c0a5a621b05d57721d0bbc67804eeda45ae5993f86de98df85f0",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我不小心轉錯帳號了，該怎麼辦？",
+      "轉帳時輸入錯誤，能不能拿回來？",
+      "如果我轉錯了錢，銀行會怎麼幫我處理？"
+    ]
+  },
+  "03_credit_card.md#信用卡遺失或被盜刷": {
+    "hash": "abe02a51b9992191bd18d7a90c5b64ef21285b6a30ed98f3a148e75fc12d8b9c",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我不小心把信用卡弄丟了，該怎麼辦？",
+      "如果我的信用卡被盜刷了，怎麼處理？",
+      "我想知道掛失信用卡的流程是什麼？"
+    ]
+  },
+  "03_credit_card.md#分期付款": {
+    "hash": "4292cdfcf2b5d670acabb50b469155853304123c5660455a9ed23402673712af",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道信用卡消費可以分幾期付款？",
+      "如果我買了超過3000元的東西，怎麼分期呢？",
+      "分期付款的利率是怎麼算的？"
+    ]
+  },
+  "03_credit_card.md#年費": {
+    "hash": "d280b565c0ba993ea36d3cf8ee359f4c619253d1b76c3011b45cf20c74e515d0",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道信用卡的年費怎麼算？",
+      "普卡的年費有什麼優惠嗎？",
+      "御璽卡和白金卡的年費是怎樣的？"
+    ]
+  },
+  "03_credit_card.md#循環利息與違約金": {
+    "hash": "aa2841db401b674e3dfc0cdb3e0b10a202910551fdfca19095fa4a0b99bc6f1b",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "如果我沒全額還信用卡，利息會怎麼算？",
+      "我如果沒在截止日之前繳最低金額，會有什麼罰款嗎？",
+      "信用卡的循環利息和違約金是怎麼回事？"
+    ]
+  },
+  "03_credit_card.md#申請條件與文件": {
+    "hash": "e1597221183ef4eab90f6e2c42364edd8a9c178da18c4bfc5e8e3bfe41e95dad",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道申請信用卡需要什麼條件和文件？",
+      "請問我幾歲可以申請信用卡？需要準備哪些資料？",
+      "信用卡的申請流程是怎樣的？大概要多久才能知道結果？"
+    ]
+  },
+  "03_credit_card.md#繳款方式與期限": {
+    "hash": "28cd92b2fc72b957a7a07cc58b59ff3e708f5ec3bbc237c90cfa0463b28acf91",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道信用卡的繳款時間和方式是怎樣的？",
+      "請問我什麼時候要繳信用卡費用？",
+      "可以用什麼方法來繳我的信用卡帳單呢？"
+    ]
+  },
+  "04_loans.md#信用貸款": {
+    "hash": "f402d0001261a766418e1eb38501e6c9a92ada2d47251ee8f63570a019842699",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道信用貸款的最高可以借多少？",
+      "貸款的利率和手續費是怎麼算的？",
+      "如果我在線上申請，多久能拿到錢？"
+    ]
+  },
+  "04_loans.md#房屋貸款": {
+    "hash": "01060691dcd7a2cab02788ffd6e3c0bd9b7c54a7a7b526d5dc94a7028426a812",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道房屋貸款的最高成數是多少？",
+      "貸款的期限最長可以到多久呢？",
+      "申請房貸需要準備哪些文件啊？"
+    ]
+  },
+  "04_loans.md#提前清償": {
+    "hash": "a197e942f6819b635f9b686d9c4dcaf354c6c130fb3b471057369ee8d99832db",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "如果我提前還清房貸，會有罰金嗎？",
+      "我想知道提前還款的費用是怎樣的？",
+      "信用貸款提前還款會不會被收費？"
+    ]
+  },
+  "04_loans.md#繳款日與延遲繳款": {
+    "hash": "d5d92822b1dd21bbfff1bbb02802481009f4e15a4e42d4851d687df8eb44c8ac",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道貸款的扣款日是什麼時候？",
+      "如果我沒按時繳款會怎樣？",
+      "逾期繳款會有什麼罰款嗎？"
+    ]
+  },
+  "04_loans.md#青年首購房貸": {
+    "hash": "ba0ac44a2521cbfa33e47843af9e0de622d44e3de0bb9b418d7e8763dc2edb8b",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道青年首購房貸的條件是什麼？",
+      "有沒有年齡限制和貸款金額的上限呢？",
+      "如果我和配偶都沒有房子，能申請多少貸款？"
+    ]
+  },
+  "05_digital_banking.md#密碼規則": {
+    "hash": "28fc6d96451e23c6c19a389fb162ef651475bd808c4e8d221a5e4830b94fcc7b",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道網路銀行的密碼要怎麼設置？",
+      "行動銀行的密碼有什麼要求嗎？",
+      "請問密碼要多久換一次啊？"
+    ]
+  },
+  "05_digital_banking.md#忘記密碼或使用者代號": {
+    "hash": "54e4c433d6daf162b84dec0f10e57c102394a2e68d8b003a23a697857b70f06c",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我忘記網路銀行的密碼怎麼辦？",
+      "如果我輸入錯誤密碼太多次會怎樣？",
+      "行動銀行的使用者代號忘了怎麼處理？"
+    ]
+  },
+  "05_digital_banking.md#換手機後如何綁定": {
+    "hash": "2f29bf0443cd42cc7f28015e230cb1b257ff48959a2c7141f7ca12673d89efea",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我換手機了，怎麼在新手機上用行動銀行？",
+      "我下載了行動銀行的 App，為什麼要重新綁定？",
+      "我可以同時在兩部手機上使用網路銀行嗎？"
+    ]
+  },
+  "05_digital_banking.md#系統維護時間": {
+    "hash": "ef45743f5053adec048461fafeec1f06dfad4bb6ca1d48cb32060cc5f22cdedd",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "請問網路銀行和行動銀行什麼時候會維護啊？",
+      "我想知道每個月的系統維護時間是什麼時候？",
+      "行動銀行會不會有定期的維護時間呢？"
+    ]
+  },
+  "05_digital_banking.md#防詐提醒": {
+    "hash": "a17e329d30c14eac88d1ff58cd3be2bc06358c8ab3a6e2a448d08b9d54ecd59f",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我該怎麼知道是不是詐騙電話呢？",
+      "如果有人叫我提供密碼，我該怎麼辦？",
+      "有什麼方法可以防止網路詐騙嗎？"
+    ]
+  },
+  "05_digital_banking.md#首次申請網路銀行": {
+    "hash": "b6cc4e2070bf563feb44887cb43b12f179e46d8d0a3183f2d7a8c6b106a8e018",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道怎麼第一次申請網路銀行？",
+      "如果我已經有帳戶，怎麼用行動銀行申請？",
+      "可以告訴我申請網路銀行的步驟嗎？"
+    ]
+  },
+  "06_foreign_exchange.md#國外匯款手續費": {
+    "hash": "c77a158bda44b5e165cd4149a4057fecc01b3ed6f8e0b0e3699081cfe1d3e9f3",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道匯款到國外的手續費是多少？",
+      "如果我收到國外的匯款，會有什麼費用嗎？",
+      "每年匯款超過500萬美元需要注意什麼？"
+    ]
+  },
+  "06_foreign_exchange.md#外幣帳戶開戶": {
+    "hash": "eabeba3470b7b6533b381e910c9c267ad974a7cf80409143b62970dfb492ffac",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道怎麼在行動銀行開外幣帳戶？",
+      "可以用台幣帳戶開外幣帳戶嗎？",
+      "外幣帳戶可以存哪些幣種呢？"
+    ]
+  },
+  "06_foreign_exchange.md#線上換匯優惠": {
+    "hash": "d0444e7d16ced11ea8338dd187e1cff600770e5393aaaa32f373b79058494a76",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道網路換匯有什麼優惠嗎？",
+      "請問換美元和日圓的匯率優惠是怎麼樣的？",
+      "線上換匯的時間和優惠是什麼呢？"
+    ]
+  },
+  "06_foreign_exchange.md#臨櫃外幣現鈔": {
+    "hash": "cf80b79ad46c6ffcf59b99d42304e71b4b74a56ab6f74345ed451fc54b2de986",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我想知道在銀行換外幣現鈔要不要手續費？",
+      "如果我用外幣帳戶提領現鈔，會有什麼費用嗎？",
+      "臨櫃換外幣的匯率跟即期匯率有什麼不同？"
+    ]
+  },
+  "07_branch_service.md#存摺補發與印鑑變更": {
+    "hash": "5d5ead30f1fe896a84e22d20de150190e538c7c58007ed3a07c797e3641fb8fd",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我不小心弄丟了存摺，該怎麼辦？",
+      "如果印章不見了，要去哪裡改呢？",
+      "補發存摺需要帶什麼東西？"
+    ]
+  },
+  "07_branch_service.md#客服專線": {
+    "hash": "1e77f82a1c1c5c2939eb866dc90dc9cf01a25465a396fcd90973349825718f25",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "請問我可以在哪裡找到分行的營業時間？",
+      "你們的客服電話是什麼？",
+      "如果我在國外怎麼聯絡你們的客服？"
+    ]
+  },
+  "07_branch_service.md#營業時間": {
+    "hash": "1e27300c3e46e52f1f4572fa5371fcc1b9e55e02f638643e36e0737d40a9ee8f",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "你們的分行什麼時候開門啊？",
+      "我想知道分行的營業時間是怎樣的？",
+      "有沒有分行在晚上開的？"
+    ]
+  },
+  "07_branch_service.md#申訴管道": {
+    "hash": "e87f19a016f85a449e1b269c87b7a58ce9371e32d442014226fabd272a9f0d4b",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "請問我可以怎麼反映對你們服務的意見呢？",
+      "如果我對處理結果不滿意，該怎麼辦？",
+      "你們的客服電話和營業時間是什麼呢？"
+    ]
+  },
+  "07_branch_service.md#臨櫃預約取號": {
+    "hash": "2133fb64de21703ecfc3bca53e4a41c930841ab40e815927824fa12d16cf4916",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "我怎麼在 App 預約去分行的服務呢？",
+      "去分行之前要怎麼拿號碼？",
+      "可以用手機預約臨櫃服務嗎？"
+    ]
+  },
+  "08_about.md#創辦人": {
+    "hash": "2d9ce8aa222074a036507979b22f66c80b4828297d9aeae92792f94bcbe23574",
+    "model": "gpt-4o-mini",
+    "questions": [
+      "兩津商業銀行的創辦人是誰啊？",
+      "阿兩是怎麼開始這家銀行的？",
+      "這家銀行的創辦人有什麼背景嗎？"
+    ]
+  }
+}
