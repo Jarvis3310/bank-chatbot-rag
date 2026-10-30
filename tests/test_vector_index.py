@@ -202,6 +202,24 @@ def test_embedding卡住時close不無限等_之後補建也不寫入不印錯�
     assert capsys.readouterr().out == ""
 
 
+class EmptyEmbedder(FakeEmbedder):
+    """API 回了空的結果：沒有任何向量寫進向量庫。"""
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return []
+
+
+def test_strict時向量庫全空要報錯_不默默退回(tmp_path: Path) -> None:
+    index = VectorIndex(CHUNKS, EmptyEmbedder({}), tmp_path / "strict", strict=True)
+    with pytest.raises(RuntimeError, match="向量庫"):
+        index.search(FEE_Q)
+    index.close()
+
+    index = VectorIndex(CHUNKS, EmptyEmbedder({}), tmp_path / "normal")
+    assert index.search(FEE_Q) is None  # 平常仍走退回模式
+    index.close()
+
+
 def test_strict時失敗就丟例外(tmp_path: Path) -> None:
     with pytest.raises(ConnectionError):
         VectorIndex(CHUNKS, BrokenAtStartup({}), tmp_path / "startup", strict=True)

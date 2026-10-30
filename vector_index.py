@@ -114,6 +114,8 @@ class VectorIndex:
             else:
                 self._sync_in_background()
         if not self.has_vectors:
+            if self.strict:  # 向量庫全空：eval 要報錯，不拿退回模式的分數冒充混合檢索
+                raise RuntimeError("向量庫是空的，沒有任何段落的向量")
             return None
         try:
             vec = self._embed_query(query)
