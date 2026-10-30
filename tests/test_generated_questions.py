@@ -69,6 +69,18 @@ def test_段落沒變不重新生成_改了只重新生成那一段(tmp_path: Pa
     assert len(embedder.calls) == 1 and embedder.calls[0].startswith(edited[3].embed_text + "\n")
 
 
+def test_段落刪除或改名後重建_問法檔移除舊段落(tmp_path: Path) -> None:
+    build(tmp_path, FakeGenerator())
+    renamed = CHUNKS.copy()
+    renamed[1] = dataclasses.replace(renamed[1], section="改過的標題")
+    remaining = renamed[:-1]  # 另外刪掉最後一段
+
+    build(tmp_path, FakeGenerator(), remaining)
+
+    saved = json.loads((tmp_path / "questions.json").read_text(encoding="utf-8"))
+    assert sorted(saved) == sorted(c.key for c in remaining)
+
+
 def test_換生成模型時整庫重新生成(tmp_path: Path) -> None:
     build(tmp_path, FakeGenerator("舊模型"))
 

@@ -216,6 +216,13 @@ class VectorIndex:
                 found[c.key] = entry["questions"]
             else:
                 todo.append(c)
+        # 段落刪除或改名後，舊 key 的問法留著沒用，重建時一併移除
+        keys = {c.key for c in self.chunks}
+        stale = [k for k in saved if k not in keys]
+        if stale and self.questions_path is not None and not self.closed:
+            for k in stale:
+                del saved[k]
+            save_questions(self.questions_path, saved)
         if not todo:
             return found, False
 
