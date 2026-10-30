@@ -10,7 +10,6 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -18,7 +17,15 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from embedding import Embedder, text_hash
-from questions import QuestionGenerator, load_questions, save_questions
+from questions import (
+    QuestionEntry,
+    QuestionGenerator,
+    generate_questions,
+    load_questions,
+    prune_questions,
+    reusable_questions,
+    save_questions,
+)
 
 if TYPE_CHECKING:
     from rag import Chunk
@@ -29,7 +36,6 @@ QUERY_TIMEOUT = 2.0  # 問題的 embedding 超過幾秒就放棄（spec 上限�
 COOLDOWN = 60.0  # 失敗後幾秒內不再試
 RETRY_POLL = 1.0  # 退回期間，背景每隔幾秒（真實時間）看一次冷卻到了沒
 CLOSE_TIMEOUT = 5.0  # close 最多等背景補建幾秒（embedding 卡住時不無限等）
-GEN_WORKERS = 8  # 生成問法時同時送幾個請求（每段一個請求，逐段送第一次建庫要等很久）
 COLLECTION = "chunks"
 
 
@@ -200,52 +206,25 @@ class VectorIndex:
             return {}, False
         model = self.generator.model
         saved = load_questions(self.questions_path) if self.questions_path is not None else {}
-        found: dict[str, list[str]] = {}
-        todo: list[Chunk] = []
-        for c in self.chunks:
-            entry = saved.get(c.key)
-            if entry is not None and entry.get("hash") == text_hash(c.embed_text) and entry.get("model") == model:
-                found[c.key] = entry["questions"]
-            else:
-                todo.append(c)
-        # 段落刪除或改名後，舊 key 的問法留著沒用，重建時一併移除
-        keys = {c.key for c in self.chunks}
-        stale = [k for k in saved if k not in keys]
-        if stale and self.questions_path is not None and not self.closed.is_set():
-            for k in stale:
-                del saved[k]
+        found, todo = reusable_questions(self.chunks, saved, model)
+        pruned = prune_questions(self.chunks, saved)  # 段落刪除或改名後，舊 key 的問法留著沒用
+        if pruned and self.questions_path is not None and not self.closed.is_set():
             save_questions(self.questions_path, saved)
         if not todo:
             return found, False
 
-        generated, error = self._generate(todo)  # 不鎖向量庫，補建期間其他問題照常查詢
+        generated, error = generate_questions(self.generator, todo)  # 不鎖向量庫，補建期間其他問題照常查詢
         if self.closed.is_set():
             return found, False
         if generated and self.questions_path is not None:
             for c in todo:
                 if c.key in generated:
-                    saved[c.key] = {"hash": text_hash(c.embed_text), "model": model, "questions": generated[c.key]}
+                    saved[c.key] = QuestionEntry(text_hash(c.embed_text), model, generated[c.key])
             save_questions(self.questions_path, saved)
         found.update(generated)
         if error is not None:
             degrade(self.strict, f"問法生成失敗，{len(todo) - len(generated)} 段先只用段落算向量：", error)
         return found, error is not None
-
-    def _generate(self, todo: list[Chunk]) -> tuple[dict[str, list[str]], Exception | None]:
-        """每段各生成一次問法（同時送 GEN_WORKERS 個請求）。回傳成功的段落（段落 key → 問法）與第一個錯誤。"""
-        assert self.generator is not None
-        results: dict[str, list[str]] = {}
-        errors: list[Exception] = []
-
-        def run(chunk: Chunk) -> None:
-            try:
-                results[chunk.key] = self.generator.generate(chunk.embed_text)
-            except Exception as e:  # noqa: BLE001 — 失敗的段落先只用段落算向量
-                errors.append(e)
-
-        with ThreadPoolExecutor(GEN_WORKERS) as pool:
-            list(pool.map(run, todo))
-        return results, errors[0] if errors else None
 
     def _retry_loop(self) -> None:
         """背景重試：失敗後每隔 COOLDOWN 秒（用注入的時鐘算）重新同步，直到成功或關閉。
