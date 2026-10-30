@@ -20,7 +20,7 @@ def test_embedding報錯時切到退回模式不丟例外(tmp_path: Path) -> Non
     assert hits[0].similarity is None
 
 
-def test_embedding卡住時3秒內切到退回模式(tmp_path: Path) -> None:
+def test_embedding卡住時2秒多就切到退回模式(tmp_path: Path) -> None:
     embedder = BreakableEmbedder()
     rag = RAG(KB, embedder=embedder, vector_dir=tmp_path)
     embedder.broken = "slow"
@@ -29,7 +29,7 @@ def test_embedding卡住時3秒內切到退回模式(tmp_path: Path) -> None:
     hits = rag.retrieve(FALLBACK_Q)
     elapsed = time.monotonic() - t0
 
-    assert elapsed < 3.5
+    assert elapsed < 2.5
     assert hits[0].chunk.section == FALLBACK_SECTION
 
 

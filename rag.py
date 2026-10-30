@@ -17,8 +17,9 @@ from pathlib import Path
 
 import llm
 from embedding import Embedder, OpenAIEmbedder
+from fallback import degrade
 from questions import OpenAIQuestionGenerator, QuestionGenerator
-from vector_index import VectorIndex, degrade
+from vector_index import VectorIndex
 
 # 口語 → 知識庫用語。BM25 只比對字面，這張表補上常見說法。
 SYNONYMS = {

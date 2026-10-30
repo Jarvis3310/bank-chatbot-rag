@@ -9,13 +9,9 @@ from qdrant_client import QdrantClient
 
 import vector_index
 
-from conftest import KB, BreakableEmbedder, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup
-from rag import Chunk, load_chunks
+from conftest import CHUNKS, FEE_Q, FEE_RULES, BreakableEmbedder, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup, wait_until
+from rag import Chunk
 from vector_index import VectorIndex
-
-CHUNKS = load_chunks(KB)
-FEE_RULES = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
-FEE_Q = "用 ATM 跨行轉帳要多少手續費"
 
 
 def section_of(hits: list[tuple[int, float]], chunks: list[Chunk] = CHUNKS) -> str:
@@ -92,14 +88,14 @@ def test_知識庫拿掉的段落從向量庫移除(tmp_path: Path) -> None:
     assert all(sim < 0.9 for _, sim in hits)
 
 
-def test_查詢embedding卡住時3秒內回None(tmp_path: Path) -> None:
+def test_查詢embedding卡住時2秒多就回None(tmp_path: Path) -> None:
     embedder = BreakableEmbedder()
     index = VectorIndex(CHUNKS, embedder, tmp_path)
     embedder.broken = "slow"
 
     t0 = time.monotonic()
     assert index.search(FEE_Q) is None
-    assert time.monotonic() - t0 < 3.5
+    assert time.monotonic() - t0 < 2.5
 
 
 def test_查詢失敗後冷卻60秒內不再試(tmp_path: Path) -> None:
@@ -136,10 +132,8 @@ def test_建庫失敗後冷卻時間到在背景補建_補建完成才搜得到(
         assert time.monotonic() - t0 < 1.0
 
         embedder.gate.set()
-        deadline = time.monotonic() + 5
-        while (hits := index.search(FEE_Q)) is None and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert section_of(hits) == "跨行轉帳手續費"
+        assert wait_until(lambda: index.search(FEE_Q) is not None)
+        assert section_of(index.search(FEE_Q)) == "跨行轉帳手續費"
         assert sum(c.embed_text in embedder.calls for c in CHUNKS) == len(CHUNKS)  # 只補建一次
     finally:
         embedder.gate.set()
@@ -169,8 +163,62 @@ def start_gated_rebuild(tmp_path: Path) -> tuple[VectorIndex, GatedAfterStartup,
     index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
     embedder.broken = False
     clock.now += 60
-    assert index.search(FEE_Q) is None
+    assert embedder.waiting.wait(5)  # 沒人發問，背景自己開始補建
     return index, embedder, clock
+
+
+def test_建庫失敗後沒人發問_冷卻時間到背景自動補建(tmp_path: Path) -> None:
+    embedder, clock = BrokenAtStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
+    embedder.broken = False
+    try:
+        clock.now += 59
+        time.sleep(0.3)
+        assert not index.has_vectors  # 冷卻中不重試
+
+        clock.now += 1.5
+        assert wait_until(lambda: index.has_vectors)  # 全程沒有呼叫 search
+        assert section_of(index.search(FEE_Q)) == "跨行轉帳手續費"
+    finally:
+        index.close()
+
+
+def test_背景重試又失敗時再隔60秒重試_同一時間最多一個(tmp_path: Path) -> None:
+    embedder, clock = GatedAfterStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
+    embedder.broken = False
+    try:
+        clock.now += 60
+        assert embedder.waiting.wait(5)  # 第一次重試開始，卡在 gate
+        clock.now += 600  # 重試還沒結束，再久也不會再開第二個
+        time.sleep(0.3)
+        assert embedder.batches == 2  # 啟動那次加上正在卡住的這次，沒有第三次
+        embedder.broken = True
+        embedder.gate.set()  # 第一次重試失敗（gate 之後 embedding 報錯）
+        assert wait_until(lambda: index.sync_failed_at == clock.now)
+
+        embedder.broken = False
+        calls = len(embedder.calls)
+        clock.now += 59
+        time.sleep(0.3)
+        assert len(embedder.calls) == calls  # 失敗後重新計 60 秒
+
+        clock.now += 1.5
+        assert wait_until(lambda: index.has_vectors)
+    finally:
+        embedder.gate.set()
+        index.close()
+
+
+def test_沒有失敗時close不會被背景重試卡住(tmp_path: Path) -> None:
+    embedder, clock = BrokenAtStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)  # 失敗，背景正在等冷卻
+
+    t0 = time.monotonic()
+    index.close()
+
+    assert time.monotonic() - t0 < 1.0
+    assert not index.rebuilding.is_alive()
 
 
 def test_補建中close會等補建結束_不拋例外也不印錯誤_之後不再補建(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -200,6 +248,24 @@ def test_embedding卡住時close不無限等_之後補建也不寫入不印錯�
     embedder.gate.set()  # 卡住的補建這時才回來
     index.rebuilding.join(5)
     assert capsys.readouterr().out == ""
+
+
+class EmptyEmbedder(FakeEmbedder):
+    """API 回了空的結果：沒有任何向量寫進向量庫。"""
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return []
+
+
+def test_strict時向量庫全空要報錯_不默默退回(tmp_path: Path) -> None:
+    index = VectorIndex(CHUNKS, EmptyEmbedder({}), tmp_path / "strict", strict=True)
+    with pytest.raises(RuntimeError, match="向量庫"):
+        index.search(FEE_Q)
+    index.close()
+
+    index = VectorIndex(CHUNKS, EmptyEmbedder({}), tmp_path / "normal")
+    assert index.search(FEE_Q) is None  # 平常仍走退回模式
+    index.close()
 
 
 def test_strict時失敗就丟例外(tmp_path: Path) -> None:

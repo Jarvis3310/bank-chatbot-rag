@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Protocol
 
@@ -13,6 +14,11 @@ import requests
 MODEL = "text-embedding-3-large"  # eval：比 small 多答對「ATM 跨行轉帳手續費」，混合檢索第一名 13→14/14，每題延遲相近（約 0.3 秒）
 BATCH = 100  # 一次請求最多送幾段
 TIMEOUT = 30  # 秒；問題的 embedding 另有 vector_index.QUERY_TIMEOUT 較短的上限
+
+
+def text_hash(text: str) -> str:
+    """文字的指紋（sha256），內容一改就變；向量庫和問法檔用它判斷舊結果還能不能沿用。"""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class Embedder(Protocol):

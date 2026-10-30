@@ -195,6 +195,24 @@ class Score:
     n_out: int = 0
 
 
+def tally(score: Score, sections: list[str], expect: str | None, top1_only: bool) -> bool:
+    """把一題的檢索結果記進分數，回傳這題算不算答對（印 ✅／❌ 用）。
+
+    第一名正確、前 k 名有找到、範圍外撞到段落三種數字兩個題組都一樣；差在「答對」的條件：
+    主題組（top1_only=False）前 k 名有找到就算對；驗證題組（top1_only=True）要第一名正確才算對。
+    範圍外題目（expect 為 None）兩邊都是檢索結果為空才算對。
+    """
+    if expect is None:
+        score.n_out += 1
+        score.out_hits += bool(sections)
+        return not sections
+    score.n_in += 1
+    first = bool(sections) and sections[0] == expect
+    score.hit1 += first
+    score.hitk += expect in sections
+    return first if top1_only else expect in sections
+
+
 def main(with_answer: bool) -> None:
     if not os.getenv("OPENAI_API_KEY", "").strip():
         sys.exit("混合檢索需要 OPENAI_API_KEY（只測檢索也需要），請先在 .env 設定")
@@ -228,16 +246,7 @@ def run(rags: dict[str, RAG], with_answer: bool) -> None:
         lines = [q]
         for name, rag in rags.items():
             sections = [h.chunk.section for h in rag.retrieve(q)]
-            s = scores[name]
-            if expect:
-                s.n_in += 1
-                s.hit1 += bool(sections) and sections[0] == expect
-                s.hitk += expect in sections
-                r_ok = expect in sections
-            else:
-                s.n_out += 1
-                s.out_hits += bool(sections)
-                r_ok = not sections  # 範圍外題目：檢索結果為空才算通過
+            r_ok = tally(scores[name], sections, expect, top1_only=False)
             lines.append(f"   {'✅' if r_ok else '❌'} {name}：{' / '.join(sections) or '（無）'}")
 
         if with_answer:
@@ -321,16 +330,7 @@ def print_holdout(rags: dict[str, RAG]) -> None:
         lines = [f"{q}（應命中：{expect or '無'}）"]
         for name, rag in rags.items():
             sections = [h.chunk.section for h in rag.retrieve(q)]
-            s = scores[name]
-            if expect:
-                s.n_in += 1
-                s.hit1 += bool(sections) and sections[0] == expect
-                s.hitk += expect in sections
-                ok = bool(sections) and sections[0] == expect
-            else:
-                s.n_out += 1
-                s.out_hits += bool(sections)
-                ok = not sections
+            ok = tally(scores[name], sections, expect, top1_only=True)
             lines.append(f"   {'✅' if ok else '❌'} {name}：{' / '.join(sections) or '（無）'}")
         print("\n".join(lines))
     print()

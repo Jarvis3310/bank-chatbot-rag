@@ -1,19 +1,14 @@
 """建庫時 LLM 替每段生成口語問法，跟段落一起算向量；問法存在 JSON 檔（進版控），生成失敗時退回只用段落、冷卻後重試。"""
 import dataclasses
 import json
-import time
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from conftest import KB, FakeClock, FakeEmbedder, FakeGenerator
+from conftest import CHUNKS, FEE_Q, FEE_RULES, KB, FakeClock, FakeEmbedder, FakeGenerator, wait_until
 from rag import RAG, Chunk, load_chunks
-from vector_index import VectorIndex, chunk_hash
-
-CHUNKS = load_chunks(KB)
-FEE_RULES = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
-FEE_Q = "用 ATM 跨行轉帳要多少手續費"
+from embedding import text_hash
+from vector_index import VectorIndex
 
 
 def build(tmp_path: Path, generator: FakeGenerator, chunks: list[Chunk] = CHUNKS, store: str = "vectors", **kw) -> FakeEmbedder:
@@ -40,7 +35,7 @@ def test_問法存成以段落key為鍵的JSON檔_記錄hash與生成模型(tmp_
     saved = json.loads((tmp_path / "questions.json").read_text(encoding="utf-8"))
     first = CHUNKS[0]
     title = first.embed_text.splitlines()[0]
-    assert saved[first.key] == {"hash": chunk_hash(first), "model": "fake-gen", "questions": [f"{title} 問法{n}" for n in (1, 2, 3)]}
+    assert saved[first.key] == {"hash": text_hash(first.embed_text), "model": "fake-gen", "questions": [f"{title} 問法{n}" for n in (1, 2, 3)]}
     assert list(saved) == sorted(c.key for c in CHUNKS)
 
 
@@ -69,6 +64,18 @@ def test_段落沒變不重新生成_改了只重新生成那一段(tmp_path: Pa
     assert len(embedder.calls) == 1 and embedder.calls[0].startswith(edited[3].embed_text + "\n")
 
 
+def test_段落刪除或改名後重建_問法檔移除舊段落(tmp_path: Path) -> None:
+    build(tmp_path, FakeGenerator())
+    renamed = CHUNKS.copy()
+    renamed[1] = dataclasses.replace(renamed[1], section="改過的標題")
+    remaining = renamed[:-1]  # 另外刪掉最後一段
+
+    build(tmp_path, FakeGenerator(), remaining)
+
+    saved = json.loads((tmp_path / "questions.json").read_text(encoding="utf-8"))
+    assert sorted(saved) == sorted(c.key for c in remaining)
+
+
 def test_換生成模型時整庫重新生成(tmp_path: Path) -> None:
     build(tmp_path, FakeGenerator("舊模型"))
 
@@ -92,12 +99,6 @@ def test_問法變了該段向量就重算(tmp_path: Path) -> None:
     assert embedder.calls == [f"{CHUNKS[0].embed_text}\n手動改過的問法"]
 
 
-def wait_for(condition: Callable[[], bool]) -> None:
-    deadline = time.monotonic() + 5
-    while not condition() and time.monotonic() < deadline:
-        time.sleep(0.05)
-
-
 def test_生成失敗時只用段落算向量_不寫回檔案_仍能回答_冷卻後重試(tmp_path: Path) -> None:
     embedder, generator, clock = FakeEmbedder(FEE_RULES), FakeGenerator(), FakeClock()
     qfile = tmp_path / "questions.json"
@@ -117,7 +118,7 @@ def test_生成失敗時只用段落算向量_不寫回檔案_仍能回答_冷�
 
         clock.now += 1.5
         rag.retrieve(FEE_Q)  # 觸發背景補建
-        wait_for(lambda: rag.vectors.rebuilding is not None and not rag.vectors.rebuilding.is_alive())
+        wait_until(lambda: rag.vectors.rebuilding is not None and not rag.vectors.rebuilding.is_alive())
         assert sorted(generator.calls) == sorted(c.embed_text for c in CHUNKS)
         assert sum("問法1" in t for t in embedder.calls) == len(CHUNKS)
     finally:
