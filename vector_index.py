@@ -80,6 +80,8 @@ class VectorIndex:
         self.strict = strict
         self.store = QdrantClient(path=str(path))
         self.lock = threading.Lock()  # 背景補建和查詢不能同時操作 Qdrant 本機模式
+        # 以下三個欄位由查詢或背景重試各自整個覆寫，讀的一方只是判斷「現在能不能用」；
+        # 讀到新舊哪一個值都只差一輪冷卻，而且 Python 單一賦值本來就不可分割，所以不加鎖
         self.search_failed_at: float | None = None
         self.sync_failed_at: float | None = None
         self.has_vectors = False
