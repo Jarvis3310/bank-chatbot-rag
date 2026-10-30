@@ -1,14 +1,14 @@
 """建庫時 LLM 替每段生成口語問法，跟段落一起算向量；問法存在 JSON 檔（進版控），生成失敗時退回只用段落、冷卻後重試。"""
 import dataclasses
 import json
-import time
 from pathlib import Path
 
 import pytest
 
 from conftest import CHUNKS, FEE_Q, FEE_RULES, KB, FakeClock, FakeEmbedder, FakeGenerator, wait_until
 from rag import RAG, Chunk, load_chunks
-from vector_index import VectorIndex, chunk_hash
+from embedding import text_hash
+from vector_index import VectorIndex
 
 
 def build(tmp_path: Path, generator: FakeGenerator, chunks: list[Chunk] = CHUNKS, store: str = "vectors", **kw) -> FakeEmbedder:
@@ -35,7 +35,7 @@ def test_問法存成以段落key為鍵的JSON檔_記錄hash與生成模型(tmp_
     saved = json.loads((tmp_path / "questions.json").read_text(encoding="utf-8"))
     first = CHUNKS[0]
     title = first.embed_text.splitlines()[0]
-    assert saved[first.key] == {"hash": chunk_hash(first), "model": "fake-gen", "questions": [f"{title} 問法{n}" for n in (1, 2, 3)]}
+    assert saved[first.key] == {"hash": text_hash(first.embed_text), "model": "fake-gen", "questions": [f"{title} 問法{n}" for n in (1, 2, 3)]}
     assert list(saved) == sorted(c.key for c in CHUNKS)
 
 

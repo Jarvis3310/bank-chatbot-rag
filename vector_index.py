@@ -6,7 +6,6 @@ strict（eval 用）時改成丟例外。
 """
 from __future__ import annotations
 
-import hashlib
 import threading
 import time
 import uuid
@@ -18,7 +17,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from embedding import Embedder
+from embedding import Embedder, text_hash
 from questions import QuestionGenerator, load_questions, save_questions
 
 if TYPE_CHECKING:
@@ -37,11 +36,6 @@ COLLECTION = "chunks"
 def point_id(chunk: Chunk) -> str:
     """向量庫的 point id，由「來源檔＋章節標題」決定；章節改名就是另一段。"""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk.key))
-
-
-def chunk_hash(chunk: Chunk) -> str:
-    """段落（文件標題＋章節標題＋內文）的指紋，內容一改就變；問法檔用它判斷問法還能不能沿用。"""
-    return hashlib.sha256(chunk.embed_text.encode("utf-8")).hexdigest()
 
 
 def vector_text(chunk: Chunk, questions: list[str] | None) -> str:
@@ -139,7 +133,7 @@ class VectorIndex:
         current = []
         for i, c in enumerate(self.chunks):
             text = vector_text(c, questions.get(c.key))
-            current.append(Point(point_id(c), i, c, text, hashlib.sha256(text.encode("utf-8")).hexdigest()))
+            current.append(Point(point_id(c), i, c, text, text_hash(text)))
         model = self.embedder.model
         stored: dict[str, str] = {}  # point id → hash
         with self.lock:
@@ -210,7 +204,7 @@ class VectorIndex:
         todo: list[Chunk] = []
         for c in self.chunks:
             entry = saved.get(c.key)
-            if entry is not None and entry.get("hash") == chunk_hash(c) and entry.get("model") == model:
+            if entry is not None and entry.get("hash") == text_hash(c.embed_text) and entry.get("model") == model:
                 found[c.key] = entry["questions"]
             else:
                 todo.append(c)
@@ -230,7 +224,7 @@ class VectorIndex:
         if generated and self.questions_path is not None:
             for c in todo:
                 if c.key in generated:
-                    saved[c.key] = {"hash": chunk_hash(c), "model": model, "questions": generated[c.key]}
+                    saved[c.key] = {"hash": text_hash(c.embed_text), "model": model, "questions": generated[c.key]}
             save_questions(self.questions_path, saved)
         found.update(generated)
         if error is not None:
