@@ -202,10 +202,21 @@ def main(with_answer: bool) -> None:
         # strict：向量檢索用不了就丟例外，不默默改用退回模式
         rags = {name: RAG("kb", mode=mode, strict=True) for mode, name in COLUMNS.items()}
     except RuntimeError as e:
-        sys.exit(f"混合檢索用不了：{e}")
+        exit_unusable(e)
     if with_answer and not llm.enabled():
         sys.exit("請先在 .env 設定 LLM_PROVIDER 與 API key")
+    try:
+        run(rags, with_answer)
+    except (RuntimeError, OSError) as e:  # key 錯誤等：第一題查詢才會發生（OSError 含逾時與連線錯誤）
+        exit_unusable(e)
 
+
+def exit_unusable(e: Exception) -> None:
+    """混合檢索用不了：印一行原因（API 回的多行 JSON 併成一行），以非 0 結束。"""
+    sys.exit(f"混合檢索用不了：{' '.join(str(e).split())}")
+
+
+def run(rags: dict[str, RAG], with_answer: bool) -> None:
     scores = {name: Score() for name in rags}
     ans_ok = 0
     times = []
