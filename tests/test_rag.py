@@ -1,13 +1,13 @@
 import pytest
 
-from conftest import KB
+from conftest import FEE_Q, KB
 from rag import RAG, Mode
 
 
 @pytest.mark.parametrize("mode", [Mode.FALLBACK, Mode.BM25_ONLY])
 def test_兩種模式都會回傳段落(mode: Mode) -> None:
     rag = RAG(KB, mode=mode)
-    hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    hits = rag.retrieve(FEE_Q)
     assert hits
     assert hits[0].chunk.section == "跨行轉帳手續費"
 

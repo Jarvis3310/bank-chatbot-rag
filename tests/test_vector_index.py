@@ -9,13 +9,9 @@ from qdrant_client import QdrantClient
 
 import vector_index
 
-from conftest import KB, BreakableEmbedder, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup
-from rag import Chunk, load_chunks
+from conftest import CHUNKS, FEE_Q, FEE_RULES, BreakableEmbedder, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup, wait_until
+from rag import Chunk
 from vector_index import VectorIndex
-
-CHUNKS = load_chunks(KB)
-FEE_RULES = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
-FEE_Q = "用 ATM 跨行轉帳要多少手續費"
 
 
 def section_of(hits: list[tuple[int, float]], chunks: list[Chunk] = CHUNKS) -> str:
@@ -136,10 +132,8 @@ def test_建庫失敗後冷卻時間到在背景補建_補建完成才搜得到(
         assert time.monotonic() - t0 < 1.0
 
         embedder.gate.set()
-        deadline = time.monotonic() + 5
-        while (hits := index.search(FEE_Q)) is None and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert section_of(hits) == "跨行轉帳手續費"
+        assert wait_until(lambda: index.search(FEE_Q) is not None)
+        assert section_of(index.search(FEE_Q)) == "跨行轉帳手續費"
         assert sum(c.embed_text in embedder.calls for c in CHUNKS) == len(CHUNKS)  # 只補建一次
     finally:
         embedder.gate.set()
@@ -171,13 +165,6 @@ def start_gated_rebuild(tmp_path: Path) -> tuple[VectorIndex, GatedAfterStartup,
     clock.now += 60
     assert embedder.waiting.wait(5)  # 沒人發問，背景自己開始補建
     return index, embedder, clock
-
-
-def wait_until(condition) -> bool:
-    deadline = time.monotonic() + 5
-    while not condition() and time.monotonic() < deadline:
-        time.sleep(0.05)
-    return condition()
 
 
 def test_建庫失敗後沒人發問_冷卻時間到背景自動補建(tmp_path: Path) -> None:

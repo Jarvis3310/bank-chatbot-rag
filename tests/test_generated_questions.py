@@ -2,18 +2,13 @@
 import dataclasses
 import json
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from conftest import KB, FakeClock, FakeEmbedder, FakeGenerator
+from conftest import CHUNKS, FEE_Q, FEE_RULES, KB, FakeClock, FakeEmbedder, FakeGenerator, wait_until
 from rag import RAG, Chunk, load_chunks
 from vector_index import VectorIndex, chunk_hash
-
-CHUNKS = load_chunks(KB)
-FEE_RULES = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
-FEE_Q = "用 ATM 跨行轉帳要多少手續費"
 
 
 def build(tmp_path: Path, generator: FakeGenerator, chunks: list[Chunk] = CHUNKS, store: str = "vectors", **kw) -> FakeEmbedder:
@@ -104,12 +99,6 @@ def test_問法變了該段向量就重算(tmp_path: Path) -> None:
     assert embedder.calls == [f"{CHUNKS[0].embed_text}\n手動改過的問法"]
 
 
-def wait_for(condition: Callable[[], bool]) -> None:
-    deadline = time.monotonic() + 5
-    while not condition() and time.monotonic() < deadline:
-        time.sleep(0.05)
-
-
 def test_生成失敗時只用段落算向量_不寫回檔案_仍能回答_冷卻後重試(tmp_path: Path) -> None:
     embedder, generator, clock = FakeEmbedder(FEE_RULES), FakeGenerator(), FakeClock()
     qfile = tmp_path / "questions.json"
@@ -129,7 +118,7 @@ def test_生成失敗時只用段落算向量_不寫回檔案_仍能回答_冷�
 
         clock.now += 1.5
         rag.retrieve(FEE_Q)  # 觸發背景補建
-        wait_for(lambda: rag.vectors.rebuilding is not None and not rag.vectors.rebuilding.is_alive())
+        wait_until(lambda: rag.vectors.rebuilding is not None and not rag.vectors.rebuilding.is_alive())
         assert sorted(generator.calls) == sorted(c.embed_text for c in CHUNKS)
         assert sum("問法1" in t for t in embedder.calls) == len(CHUNKS)
     finally:

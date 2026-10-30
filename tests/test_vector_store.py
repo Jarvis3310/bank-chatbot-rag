@@ -3,7 +3,7 @@ import shutil
 import time
 from pathlib import Path
 
-from conftest import KB, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup
+from conftest import FEE_Q, FEE_RULES, KB, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup, wait_until
 from rag import RAG
 
 
@@ -45,16 +45,15 @@ def test_改一段後重建只重算那一段(tmp_path: Path) -> None:
 
 def test_刪一段後重建該段檢索不到(tmp_path: Path) -> None:
     kb, store = copy_kb(tmp_path), tmp_path / "vectors"
-    rules = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
-    RAG(kb, embedder=FakeEmbedder(rules), vector_dir=store).close()
+    RAG(kb, embedder=FakeEmbedder(FEE_RULES), vector_dir=store).close()
     path = kb / "02_transfer_fees.md"
     text = path.read_text(encoding="utf-8")
     start = text.index("## 跨行轉帳手續費")
     end = text.index("\n## ", start + 1)
     path.write_text(text[:start] + text[end + 1 :], encoding="utf-8")
 
-    rag = RAG(kb, embedder=FakeEmbedder(rules), vector_dir=store)
-    hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    rag = RAG(kb, embedder=FakeEmbedder(FEE_RULES), vector_dir=store)
+    hits = rag.retrieve(FEE_Q)
     rag.close()
 
     assert "跨行轉帳手續費" not in [h.chunk.section for h in hits]
@@ -64,15 +63,14 @@ def test_刪一段後重建該段檢索不到(tmp_path: Path) -> None:
 
 def test_重算失敗仍能啟動且沒重算的段落可用BM25檢索(tmp_path: Path) -> None:
     kb, store = copy_kb(tmp_path), tmp_path / "vectors"
-    rules = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
-    RAG(kb, embedder=FakeEmbedder(rules), vector_dir=store).close()
+    RAG(kb, embedder=FakeEmbedder(FEE_RULES), vector_dir=store).close()
     edit_kb(kb / "02_transfer_fees.md", "ATM 轉帳（非約定）：每日上限 3 萬元。", "ATM 轉帳（非約定）：每日上限 5 萬元。")
 
-    embedder = BrokenAtStartup(rules)
+    embedder = BrokenAtStartup(FEE_RULES)
     rag = RAG(kb, embedder=embedder, vector_dir=store)
     embedder.broken = False
     changed = rag.retrieve("ATM 轉帳每日上限多少")
-    unchanged = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    unchanged = rag.retrieve(FEE_Q)
     rag.close()
 
     hit = next(h for h in changed if h.chunk.section == "轉帳限額")
@@ -92,24 +90,19 @@ def test_第一次啟動就重算失敗時向量庫全空_改用退回模式(tmp
     assert all(h.similarity is None for h in hits)
 
 
-def wait_for_similarity(rag: RAG, query: str, timeout: float = 5.0) -> list:
+def wait_for_similarity(rag: RAG, query: str) -> list:
     """背景補建完成前一直是退回模式，輪詢到出現向量相似度為止。"""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        hits = rag.retrieve(query)
-        if hits and hits[0].similarity is not None:
-            return hits
-        time.sleep(0.05)
-    raise AssertionError("背景補建沒有完成")
+    assert wait_until(lambda: (hits := rag.retrieve(query)) and hits[0].similarity is not None), "背景補建沒有完成"
+    return rag.retrieve(query)
 
 
 def test_建庫失敗後冷卻時間到_背景補建期間發問立刻用退回模式_補建完成回到混合檢索(tmp_path: Path) -> None:
-    embedder, clock = GatedAfterStartup({"跨行轉帳手續費": 0, "ATM 跨行": 0}), FakeClock()
+    embedder, clock = GatedAfterStartup(FEE_RULES), FakeClock()
     rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors", clock=clock)
     embedder.broken = False
     try:
         clock.now += 59
-        rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+        rag.retrieve(FEE_Q)
         assert embedder.calls == []  # 冷卻中不重試
 
         clock.now += 1.5
@@ -120,7 +113,7 @@ def test_建庫失敗後冷卻時間到_背景補建期間發問立刻用退回�
         assert hits[0].chunk.section == "信用卡遺失或被盜刷" and hits[0].similarity is None
 
         embedder.gate.set()
-        hits = wait_for_similarity(rag, "用 ATM 跨行轉帳要多少手續費")
+        hits = wait_for_similarity(rag, FEE_Q)
         assert hits[0].chunk.section == "跨行轉帳手續費" and hits[0].similarity > 0.9
         chunk_texts = {c.embed_text for c in rag.chunks}
         assert sum(c in chunk_texts for c in embedder.calls) == len(rag.chunks)  # 只補建一次
@@ -130,18 +123,16 @@ def test_建庫失敗後冷卻時間到_背景補建期間發問立刻用退回�
 
 
 def test_第一次啟動就斷網_網路恢復後沒人發問也在60秒後自動回到混合檢索(tmp_path: Path) -> None:
-    embedder, clock = BrokenAtStartup({"跨行轉帳手續費": 0, "ATM 跨行": 0}), FakeClock()
+    embedder, clock = BrokenAtStartup(FEE_RULES), FakeClock()
     rag = RAG(copy_kb(tmp_path), embedder=embedder, vector_dir=tmp_path / "vectors", clock=clock)
     try:
-        assert rag.retrieve("用 ATM 跨行轉帳要多少手續費")[0].similarity is None  # 斷網：退回模式
+        assert rag.retrieve(FEE_Q)[0].similarity is None  # 斷網：退回模式
 
         embedder.broken = False
         clock.now += 60
-        deadline = time.monotonic() + 5  # 這段時間不發問，等背景自己補建
-        while not rag.vectors.has_vectors and time.monotonic() < deadline:
-            time.sleep(0.05)
+        assert wait_until(lambda: rag.vectors.has_vectors)  # 這段時間不發問，等背景自己補建
 
-        hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+        hits = rag.retrieve(FEE_Q)
         assert hits[0].chunk.section == "跨行轉帳手續費" and hits[0].similarity > 0.9
     finally:
         rag.close()

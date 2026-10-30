@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, FakeEmbedder
+from conftest import FALLBACK_Q, FALLBACK_SECTION, FEE_Q, FEE_RULES, KB, FakeEmbedder
 from rag import RAG, Mode
 
 
 def test_混合檢索回傳的段落帶兩種分數(tmp_path: Path) -> None:
-    embedder = FakeEmbedder({"跨行轉帳手續費": 0, "ATM 跨行": 0})
+    embedder = FakeEmbedder(FEE_RULES)
     rag = RAG(KB, embedder=embedder, vector_dir=tmp_path)
 
-    hits = rag.retrieve("用 ATM 跨行轉帳要多少手續費")
+    hits = rag.retrieve(FEE_Q)
 
     assert hits[0].chunk.section == "跨行轉帳手續費"
     assert hits[0].similarity is not None and hits[0].similarity > 0.9

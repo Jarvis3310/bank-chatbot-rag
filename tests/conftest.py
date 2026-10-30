@@ -4,14 +4,30 @@ import math
 import random
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 import vector_index
 
+from rag import load_chunks
+
 KB = Path(__file__).resolve().parent.parent / "kb"
+CHUNKS = load_chunks(KB)
 DIM = 32
+
+# 手續費段落：假 embedding 遇到這些字就往同一個維度靠，FEE_Q 的向量因此貼近「跨行轉帳手續費」那一段
+FEE_RULES = {"跨行轉帳手續費": 0, "ATM 跨行": 0}
+FEE_Q = "用 ATM 跨行轉帳要多少手續費"
+
+
+def wait_until(condition: Callable[[], object], timeout: float = 5.0) -> bool:
+    """輪詢等背景執行緒做完；回傳最後一次檢查的結果（逾時仍不成立就是 False）。"""
+    deadline = time.monotonic() + timeout
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return bool(condition())
 
 
 @pytest.fixture(autouse=True)
