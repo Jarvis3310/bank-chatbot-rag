@@ -183,6 +183,23 @@ def test_建庫失敗後沒人發問_冷卻時間到背景自動補建(tmp_path:
         index.close()
 
 
+def test_背景補建成功時印出已回到混合檢索_正常啟動建庫不印(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    VectorIndex(CHUNKS, FakeEmbedder(FEE_RULES), tmp_path / "ok").close()
+    assert "向量庫已重建" not in capsys.readouterr().out
+
+    embedder, clock = BrokenAtStartup(FEE_RULES), FakeClock()
+    index = VectorIndex(CHUNKS, embedder, tmp_path / "retry", clock=clock)
+    embedder.broken = False
+    try:
+        capsys.readouterr()
+        clock.now += 60
+        assert wait_until(lambda: index.has_vectors)
+        index.rebuilding.join(5)  # print 在 has_vectors 之後，等背景重試結束再看輸出
+        assert "向量庫已重建，回到混合檢索" in capsys.readouterr().out
+    finally:
+        index.close()
+
+
 def test_背景重試又失敗時再隔60秒重試_同一時間最多一個(tmp_path: Path) -> None:
     embedder, clock = GatedAfterStartup(FEE_RULES), FakeClock()
     index = VectorIndex(CHUNKS, embedder, tmp_path, clock=clock)
