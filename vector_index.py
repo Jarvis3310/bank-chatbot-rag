@@ -233,6 +233,8 @@ class VectorIndex:
                 continue
             try:
                 self._sync()  # 成功會清掉 sync_failed_at、結束迴圈；失敗會重新記下時間
+                if self.sync_failed_at is None and not self.closed.is_set():
+                    print("向量庫已重建，回到混合檢索")
             except Exception as e:  # noqa: BLE001 — 背景重試的錯誤不能影響服務
                 if self.closed.is_set():
                     return
