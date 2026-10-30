@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import pytest
+from qdrant_client import QdrantClient
 
 import app
 from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder
@@ -21,3 +22,19 @@ def test_embedding失敗時網頁聊天API仍回200和答案(tmp_path: Path, mon
     assert body["answer"]
     assert FALLBACK_SECTION in body["retrieved"][0]["label"]
     assert "bm25" in body["retrieved"][0] and "similarity" not in body["retrieved"][0]  # 退回模式沒有相似度
+
+
+def test_服務結束時關閉向量庫(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "rag", RAG(KB, embedder=BreakableEmbedder(), vector_dir=tmp_path))
+
+    app.close_rag()  # 程式結束時由 atexit 呼叫
+
+    QdrantClient(path=str(tmp_path)).close()  # 向量庫資料夾的鎖已釋放，才打得開
+
+
+def test_沒用過RAG時結束不會建立RAG(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "rag", None)
+
+    app.close_rag()
+
+    assert app.rag is None

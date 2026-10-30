@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import pytest
+from qdrant_client import QdrantClient
 
 import eval as eval_module
 from conftest import KB, FakeEmbedder
@@ -43,3 +44,10 @@ def test_key錯誤時eval只印一行錯誤訊息並以非0結束(tmp_path: Path
     assert exit_.code.startswith("混合檢索用不了：")
     assert "401" in exit_.code
     assert "\n" not in exit_.code
+
+
+def test_eval結束前會關閉向量庫(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 沒關的話，Python 結束時 Qdrant 才在解構時關閉，會多印一段「Python is likely shutting down」
+    run_eval_with_wrong_key(tmp_path, monkeypatch)
+
+    QdrantClient(path=str(tmp_path)).close()  # 向量庫資料夾的鎖已釋放，才打得開

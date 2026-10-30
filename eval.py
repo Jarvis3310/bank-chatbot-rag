@@ -198,17 +198,21 @@ class Score:
 def main(with_answer: bool) -> None:
     if not os.getenv("OPENAI_API_KEY", "").strip():
         sys.exit("混合檢索需要 OPENAI_API_KEY（只測檢索也需要），請先在 .env 設定")
+    if with_answer and not llm.enabled():
+        sys.exit("請先在 .env 設定 LLM_PROVIDER 與 API key")
     try:
         # strict：向量檢索用不了就丟例外，不默默改用退回模式
         rags = {name: RAG("kb", mode=mode, strict=True) for mode, name in COLUMNS.items()}
     except RuntimeError as e:
         exit_unusable(e)
-    if with_answer and not llm.enabled():
-        sys.exit("請先在 .env 設定 LLM_PROVIDER 與 API key")
     try:
         run(rags, with_answer)
     except (RuntimeError, OSError) as e:  # key 錯誤等：第一題查詢才會發生（OSError 含逾時與連線錯誤）
         exit_unusable(e)
+    finally:
+        # 結束前先關閉向量庫，否則 Python 結束時 Qdrant 才關，會印「Python is likely shutting down」
+        for rag in rags.values():
+            rag.close()
 
 
 def exit_unusable(e: Exception) -> None:
