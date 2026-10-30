@@ -2,19 +2,26 @@
 
 客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → LLM 只根據這些段落回答，並附上出處；知識庫沒有的就回答查不到，不亂編。
 
-知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 7 份文件、36 個段落。
+知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 8 份文件、37 個段落。
 
 ```
-LINE / 網頁 ──► app.py ──► rag.py：檢索最相關的 4 段 ──► llm.py：依段落回答 ──► 回覆 + 參考資料
+LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段 ──► llm.py：依段落回答 ──► 回覆 + 參考資料
 ```
 
 | 檔案 | 用途 |
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
-| `rag.py` | 切段、中文檢索（BM25，不需 embedding）、組 prompt、解析出處 |
+| `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
+| `rag.py` | 切段、混合檢索（向量＋BM25（含同義詞表），用 RRF 合併）、組 prompt、解析出處 |
+| `vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
+| `fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
+| `embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-large`，一律用 `OPENAI_API_KEY` |
+| `questions.py` | 建庫時替每段生成 3 個客戶可能的口語問法，跟段落一起算向量：OpenAI `gpt-4o-mini`，一律用 `OPENAI_API_KEY` |
+| `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，換 embedding 或生成問法的模型時自動整庫重算，不進版控 |
 | `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
-| `eval.py` | 16 題評測：檢索是否命中正確段落、答案是否含關鍵數字 |
+| `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）與 20 題驗證題組（沒拿來調門檻，只回報）只測檢索；`--answer` 時另跑 14 題簡報題組 |
+| `tests/` | 單元測試（用假 embedding，不呼叫 API），共用設定在 `tests/conftest.py`；安裝與執行見下方「跑測試」 |
 
 ---
 
@@ -27,10 +34,32 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
+# 編輯 .env 填入 OPENAI_API_KEY（混合檢索的 embedding 需要）
 python app.py
 ```
 
 打開 http://localhost:8000 就是網頁聊天。這時 `.env` 的 `LLM_PROVIDER=none`，系統會直接回最相關的段落，可以先確認檢索正常。
+
+檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`（跟 `LLM_PROVIDER` 選哪家無關）。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
+
+建庫時還會額外呼叫 OpenAI `gpt-4o-mini`，替每段寫 3 個客戶可能的口語問法，跟段落一起算向量，讓口語問題比較容易對到正確段落（同樣用 `OPENAI_API_KEY`，跟 `LLM_PROVIDER` 無關）。從零生成（目前 37 段）每段呼叫一次，約 10 秒、生成問法約 0.002 美元（加上 embedding 約 0.003 美元）。生成失敗（沒額度、逾時、斷線）時，該段先只用段落算向量，服務照常，冷卻 60 秒後再重試。
+
+**第一次建 RAG 時會同步建庫與生成問法**（上述約 10 秒），建完才開始服務。`python app.py` 啟動時就會先建好；改用 WSGI 伺服器（例如 gunicorn）啟動時，RAG 是第一個請求才建立，第一位客戶會等到建庫完成，所以要先預熱（啟動後先送一題，或在載入應用程式時就建好 RAG）。建庫或補建失敗（例如第一次啟動就斷網）時，系統先用退回模式回答，並由背景每 60 秒自動重試，不必等人發問，網路恢復後最多約 60 秒就回到混合檢索。
+
+生成的問法存在 `kb/questions.json`（進版控），每段記錄段落指紋、生成模型和問法。建庫時段落和生成模型都相符就直接用檔案裡的問法、不呼叫 LLM，所以刪掉 `vector_store/` 重建的結果每次都一樣（LLM 每次生成的問法不完全相同，會影響檢索排名）。改了知識庫後重建（重啟服務或跑 `eval.py`），改過或新增的段落會自動補生成並寫回這個檔案，**記得把 `kb/questions.json` 跟知識庫一起 commit**。生成失敗的段落不會寫進檔案，之後重試成功才補上。段落被刪除或改名後，重建時會把檔案裡已不存在的段落一併移除。
+
+> 服務（`python app.py`）跑著時不能同時跑 `eval.py`：Qdrant 本機模式會鎖住 `vector_store/` 資料夾，請先停掉服務再跑評測。
+
+### 跑測試
+
+測試相依（pytest）放在 `requirements-dev.txt`，它會連同 `requirements.txt` 一起安裝。在已啟用的 `.venv` 裡：
+
+```powershell
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+測試不需要 `.env` 或 `OPENAI_API_KEY`。
 
 > 公司網路若 `pip install` 失敗，通常是要設定 proxy：`pip install --proxy http://公司proxy:port -r requirements.txt`。
 > 程式呼叫 LLM 和 LINE 時，也會自動使用環境變數 `HTTPS_PROXY`。
@@ -55,7 +84,7 @@ AZURE_OPENAI_ENDPOINT=https://<資源名稱>.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT=...
 ```
 
-預設模型：Claude 用 `claude-sonnet-5-5`、OpenAI 用 `gpt-4o-mini`，要換就設定 `LLM_MODEL=`。重啟 `python app.py` 後，再跑一次評測：
+預設模型：Claude 用 `claude-sonnet-5-5`、OpenAI 用 `gpt-4o-mini`，要換就設定 `LLM_MODEL=`。不論 LLM 選哪家，`OPENAI_API_KEY` 都要設定（混合檢索的 embedding 用）。停掉服務後跑一次評測，再重啟 `python app.py`：
 
 ```powershell
 python eval.py --answer
@@ -114,7 +143,6 @@ cloudflared tunnel --url http://localhost:8000
 
 ## 6. 這個 demo 刻意省略的（正式專案要補）
 
-- 檢索：知識庫大了要改用向量檢索（embedding）或混合檢索
 - 文件來源：PDF、Word、網頁的解析與定期更新
 - 對話紀錄：目前存在記憶體，重啟就清空
 - 部署、監控、權限、個資遮罩、轉真人客服
