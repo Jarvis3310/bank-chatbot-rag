@@ -19,7 +19,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from embedding import Embedder
-from questions import QuestionGenerator
+from questions import QuestionGenerator, load_questions, save_questions
 
 if TYPE_CHECKING:
     from rag import Chunk
@@ -39,7 +39,7 @@ def point_id(chunk: Chunk) -> str:
 
 
 def chunk_hash(chunk: Chunk) -> str:
-    """拿去 embedding 的整段文字的指紋，內容一改就變。"""
+    """段落（文件標題＋章節標題＋內文）的指紋，內容一改就變；問法檔用它判斷問法還能不能沿用。"""
     return hashlib.sha256(chunk.embed_text.encode("utf-8")).hexdigest()
 
 
@@ -54,7 +54,8 @@ class Point(NamedTuple):
     id: str  # point id
     index: int  # 段落編號
     chunk: Chunk
-    hash: str
+    text: str  # 拿去算向量的文字（段落＋問法）
+    hash: str  # text 的指紋
 
 
 def degrade(strict: bool, message: str, e: Exception) -> None:
@@ -73,11 +74,13 @@ class VectorIndex:
         clock: Callable[[], float] = time.monotonic,
         strict: bool = False,
         generator: QuestionGenerator | None = None,  # None：不生成問法，只用段落算向量
+        questions_path: str | Path | None = None,  # 問法檔（進版控）；None：不讀也不寫，每次都重新生成
     ):
         """打開向量庫並同步段落。向量庫被別的程式鎖住時丟例外；embedding 或問法生成失敗不丟（strict 除外），冷卻後補建。"""
         self.chunks = chunks
         self.embedder = embedder
         self.generator = generator
+        self.questions_path = Path(questions_path) if questions_path is not None else None
         self.clock = clock
         self.strict = strict
         self.store = QdrantClient(path=str(path))
@@ -124,31 +127,35 @@ class VectorIndex:
         return [(p.payload["index"], p.score) for p in points if p.score >= MIN_SIMILARITY]
 
     def _sync(self) -> None:
-        """只重算 hash 變了、新加的或缺問法的段落，並移除已不在知識庫裡的段落；embedding 或生成模型換了就整庫重算。
+        """只重算 hash 變了或新加的段落，並移除已不在知識庫裡的段落；embedding 模型換了就整庫重算。
 
+        hash 算的是「段落＋問法」，問法變了（生成模型換了、補生成成功）該段也會重算。
         重算失敗不丟例外：沒變的段落沿用舊向量，沒重算到的段落從向量庫移除，冷卻 COOLDOWN 秒後由下一題重試。
         問法生成失敗的段落先只用段落算向量，同樣冷卻後重試。
         """
-        current = [Point(point_id(c), i, c, chunk_hash(c)) for i, c in enumerate(self.chunks)]
+        questions, failed = self._questions()
+        if self.closed:
+            return
+        current = []
+        for i, c in enumerate(self.chunks):
+            text = vector_text(c, questions.get(c.key))
+            current.append(Point(point_id(c), i, c, text, hashlib.sha256(text.encode("utf-8")).hexdigest()))
         model = self.embedder.model
-        gen_model = self.generator.model if self.generator is not None else None
         stored: dict[str, str] = {}  # point id → hash
-        missing: set[str] = set()  # 上次沒生成到問法的 point id
         with self.lock:
             if self.closed:
                 return
             if self.store.collection_exists(COLLECTION):
-                models: set[tuple[str | None, str | None]] = set()
+                models: set[str | None] = set()
                 offset = None
                 while True:
                     points, offset = self.store.scroll(COLLECTION, limit=256, offset=offset, with_payload=True)
                     stored.update({str(p.id): p.payload.get("hash", "") for p in points})
-                    models.update((p.payload.get("model"), p.payload.get("gen_model")) for p in points)
-                    missing.update(str(p.id) for p in points if p.payload.get("questions") is None)
+                    models.update(p.payload.get("model") for p in points)
                     if offset is None:
                         break
-                # 換了 embedding 模型或生成模型（或舊版沒記模型）：舊向量的維度、語意都對不上，整庫重算
-                if models - {(model, gen_model)}:
+                # 換了 embedding 模型（或舊版沒記模型）：舊向量的維度、語意都對不上，整庫重算
+                if models - {model}:
                     # 先刪光 point：Windows 上本機模式刪不掉還開著的資料檔，重建同名 collection 會讀回舊 point
                     self.store.delete(COLLECTION, points_selector=list(stored))
                     self.store.delete_collection(COLLECTION)
@@ -160,28 +167,16 @@ class VectorIndex:
 
         current_ids = {pt.id for pt in current}
         stale = [pid for pid in stored if pid not in current_ids]
-        # 要重算的段落：內容變了、新加的；有生成器時再加上次沒生成到問法的
-        retry = missing if self.generator is not None else set()
-        todo = [pt for pt in current if stored.get(pt.id) != pt.hash or pt.id in retry]
+        todo = [pt for pt in current if stored.get(pt.id) != pt.hash]
         vectors: list[list[float]] = []
-        questions: dict[str, list[str]] = {}  # point id → 生成的問法
-        failed = False
-        if todo and self.generator is not None:  # 生成問法、算 embedding 時都不鎖向量庫，補建期間其他問題照常查詢
-            questions, error = self._generate(todo)
-            if error is not None:
-                if self.closed:
-                    return
-                degrade(self.strict, f"問法生成失敗，{len(todo) - len(questions)} 段先只用段落算向量：", error)
-                failed = True
-        if todo:
+        if todo:  # 算 embedding 時不鎖向量庫，補建期間其他問題照常查詢
             try:
-                vectors = self.embedder.embed([vector_text(pt.chunk, questions.get(pt.id)) for pt in todo])
+                vectors = self.embedder.embed([pt.text for pt in todo])
             except Exception as e:  # noqa: BLE001 — 啟動不能因為 embedding 失敗而中斷
                 if self.closed:
                     return
                 degrade(self.strict, f"向量重算失敗，{len(todo)} 段先只用 BM25 檢索：", e)
-                # 內容變了的段落舊向量不能再用；只缺問法的段落保留原本只用段落算的向量
-                stale += [pt.id for pt in todo if pt.id in stored and stored[pt.id] != pt.hash]
+                stale += [pt.id for pt in todo if pt.id in stored]
                 failed = True
         self.sync_failed_at = self.clock() if failed else None
 
@@ -194,18 +189,7 @@ class VectorIndex:
                 self.store.upsert(
                     COLLECTION,
                     points=[
-                        PointStruct(
-                            id=pt.id,
-                            vector=v,
-                            payload={
-                                "index": pt.index,
-                                "key": pt.chunk.key,
-                                "hash": pt.hash,
-                                "model": model,
-                                "gen_model": gen_model,
-                                "questions": questions.get(pt.id),  # None：沒生成到，冷卻後重試
-                            },
-                        )
+                        PointStruct(id=pt.id, vector=v, payload={"index": pt.index, "key": pt.chunk.key, "hash": pt.hash, "model": model})
                         for pt, v in zip(todo, vectors)
                     ],
                 )
@@ -213,15 +197,48 @@ class VectorIndex:
                 self.store.delete(COLLECTION, points_selector=stale)
             self.has_vectors = self.store.collection_exists(COLLECTION) and self.store.count(COLLECTION).count > 0
 
-    def _generate(self, todo: list[Point]) -> tuple[dict[str, list[str]], Exception | None]:
-        """每段各生成一次問法（同時送 GEN_WORKERS 個請求）。回傳成功的段落（point id → 問法）與第一個錯誤。"""
+    def _questions(self) -> tuple[dict[str, list[str]], bool]:
+        """每段的問法（段落 key → 問法）與是否有段落生成失敗。
+
+        問法檔裡段落 hash 與生成模型都相符就直接用；不符或缺少才生成，成功的寫回問法檔，失敗的不寫。
+        """
+        if self.generator is None:
+            return {}, False
+        model = self.generator.model
+        saved = load_questions(self.questions_path) if self.questions_path is not None else {}
+        found: dict[str, list[str]] = {}
+        todo: list[Chunk] = []
+        for c in self.chunks:
+            entry = saved.get(c.key)
+            if entry is not None and entry.get("hash") == chunk_hash(c) and entry.get("model") == model:
+                found[c.key] = entry["questions"]
+            else:
+                todo.append(c)
+        if not todo:
+            return found, False
+
+        generated, error = self._generate(todo)  # 不鎖向量庫，補建期間其他問題照常查詢
+        if self.closed:
+            return found, False
+        if generated and self.questions_path is not None:
+            for c in todo:
+                if c.key in generated:
+                    saved[c.key] = {"hash": chunk_hash(c), "model": model, "questions": generated[c.key]}
+            save_questions(self.questions_path, saved)
+        found.update(generated)
+        if error is not None:
+            degrade(self.strict, f"問法生成失敗，{len(todo) - len(generated)} 段先只用段落算向量：", error)
+        return found, error is not None
+
+    def _generate(self, todo: list[Chunk]) -> tuple[dict[str, list[str]], Exception | None]:
+        """每段各生成一次問法（同時送 GEN_WORKERS 個請求）。回傳成功的段落（段落 key → 問法）與第一個錯誤。"""
         assert self.generator is not None
         results: dict[str, list[str]] = {}
         errors: list[Exception] = []
 
-        def run(pt: Point) -> None:
+        def run(chunk: Chunk) -> None:
             try:
-                results[pt.id] = self.generator.generate(pt.chunk.embed_text)
+                results[chunk.key] = self.generator.generate(chunk.embed_text)
             except Exception as e:  # noqa: BLE001 — 失敗的段落先只用段落算向量
                 errors.append(e)
 

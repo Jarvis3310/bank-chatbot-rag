@@ -1,12 +1,15 @@
 """問法生成器：建庫時替每個段落寫幾個客戶可能的口語問法，跟段落一起算向量，口語問題比較容易對到正確段落。
 
 向量索引只依賴 generate() 這個介面，測試可以換成假的。
+生成的問法存在問法檔（kb/questions.json，進版控），段落沒變就沿用，重建向量庫不必再呼叫 LLM、結果可重現。
 正式使用 OpenAI chat，跟 embedding 一樣一律用 OPENAI_API_KEY（跟 LLM_PROVIDER 無關）。
 比照 llm.py 直接呼叫 REST API，公司網路設定 HTTPS_PROXY 即可。
 """
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Protocol
 
 import requests
@@ -18,6 +21,19 @@ TIMEOUT = 30
 PROMPT = """你是銀行客服資料整理員。下面是銀行知識庫的一段說明。
 請想像一般客戶在 LINE 上會怎麼問到這段內容，寫出 3 個口語、簡短、用詞不同於原文的問法（不要照抄標題用語）。
 只輸出 3 行，每行一個問法，不要編號。"""
+
+
+def load_questions(path: Path) -> dict[str, dict]:
+    """讀問法檔：段落 key → {"hash": 段落指紋, "model": 生成模型, "questions": [問法]}。沒有檔案就是空的。"""
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_questions(path: Path, saved: dict[str, dict]) -> None:
+    """寫回問法檔：依 key 排序、縮排，改一段只動那幾行，方便 diff。"""
+    text = json.dumps(saved, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    path.write_text(text, encoding="utf-8", newline="\n")
 
 
 class QuestionGenerator(Protocol):

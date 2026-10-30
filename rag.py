@@ -215,6 +215,7 @@ class RAG:
         clock: Callable[[], float] = time.monotonic,
         strict: bool = False,  # True：向量檢索用不了就丟例外、不退回（eval 用）
         generator: QuestionGenerator | None = None,  # 建庫時生成問法；只注入 embedder（測試）時不生成
+        questions_path: str | Path | None = None,  # 問法檔，預設是知識庫資料夾裡的 questions.json
     ):
         mode = Mode(mode)  # 不支援的模式丟 ValueError
         self.chunks = load_chunks(Path(kb_dir))
@@ -228,7 +229,8 @@ class RAG:
                     embedder, generator = OpenAIEmbedder(), generator or OpenAIQuestionGenerator()
                 # 向量庫資料夾預設放在知識庫旁邊，不進版控
                 path = vector_dir or Path(kb_dir).parent / "vector_store"
-                self.vectors = VectorIndex(self.chunks, embedder, path, clock, strict, generator)
+                questions_path = questions_path or Path(kb_dir) / "questions.json"
+                self.vectors = VectorIndex(self.chunks, embedder, path, clock, strict, generator, questions_path)
             except Exception as e:
                 degrade(strict, "向量檢索用不了，改用退回模式：", e)
 
