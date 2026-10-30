@@ -17,6 +17,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from embedding import Embedder, text_hash
+from fallback import degrade
 from questions import (
     QuestionEntry,
     QuestionGenerator,
@@ -57,13 +58,6 @@ class Point(NamedTuple):
     chunk: Chunk
     text: str  # 拿去算向量的文字（段落＋問法）
     hash: str  # text 的指紋
-
-
-def degrade(strict: bool, message: str, e: Exception) -> None:
-    """向量檢索用不了：strict（eval）時丟出例外，不默默退回 BM25；平常只印出原因。"""
-    if strict:
-        raise e
-    print(message, repr(e))
 
 
 class VectorIndex:
