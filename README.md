@@ -12,8 +12,9 @@ LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關�
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
-| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25（含同義詞表），用 RRF 合併）、組 prompt、解析出處 |
+| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
 | `chatbot/llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
+| `chatbot/retrieval/keyword.py` | 關鍵字檢索：字元 bigram 斷詞、同義詞表、BM25；退回模式只靠它 |
 | `chatbot/retrieval/vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
 | `chatbot/retrieval/fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
 | `chatbot/indexing/embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-large`，一律用 `OPENAI_API_KEY` |
