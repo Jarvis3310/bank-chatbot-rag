@@ -51,6 +51,23 @@ python app.py
 
 > 服務（`python app.py`）跑著時不能同時跑 `eval.py`：Qdrant 本機模式會鎖住 `vector_store/` 資料夾，請先停掉服務再跑評測。
 
+### 改用 Docker 跑
+
+公司電腦的應用程式控制原則若封鎖 Python 套件的 DLL（例如 `import qdrant_client` 時出現「應用程式控制原則已封鎖此檔案」），改用 Docker 跑。需要 Docker Desktop，`.env` 照上面的步驟準備好：
+
+```powershell
+docker build -t bank-chatbot .
+docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/app/kb" -v "${PWD}/vector_store:/app/vector_store" bank-chatbot
+```
+
+| 掛載 | 原因 |
+|---|---|
+| `.env`（唯讀） | API key 不打包進 image；由程式自己讀 `.env`，寫法跟本機相同 |
+| `kb/` | 改知識庫只要重啟容器，不必重新 build；補生成的問法會寫回本機的 `kb/questions.json` |
+| `vector_store/` | 重啟容器不必重建向量庫 |
+
+按 Ctrl+C 停止。跑評測時先停掉服務，再把最後的 `bank-chatbot` 改成 `bank-chatbot python eval.py`（`-p 8000:8000` 可省略）。
+
 ### 跑測試
 
 測試相依（pytest）放在 `requirements-dev.txt`，它會連同 `requirements.txt` 一起安裝。在已啟用的 `.venv` 裡：
