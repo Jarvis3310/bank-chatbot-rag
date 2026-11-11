@@ -1,0 +1,51 @@
+"""Embedding 產生器：把文字轉成向量。RAG 只依賴 embed() 這個介面，測試可以換成假的。
+
+正式使用 OpenAI text-embedding-3-large，一律用 OPENAI_API_KEY（跟 LLM_PROVIDER 無關）。
+比照 llm.py 直接呼叫 REST API，公司網路設定 HTTPS_PROXY 即可。
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+from typing import Protocol
+
+import requests
+
+MODEL = "text-embedding-3-large"  # eval：比 small 多答對「ATM 跨行轉帳手續費」，混合檢索第一名 13→14/14，每題延遲相近（約 0.3 秒）
+BATCH = 100  # 一次請求最多送幾段
+TIMEOUT = 30  # 秒；問題的 embedding 另有 vector_index.QUERY_TIMEOUT 較短的上限
+
+
+def text_hash(text: str) -> str:
+    """文字的指紋（sha256），內容一改就變；向量庫和問法檔用它判斷舊結果還能不能沿用。"""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+class Embedder(Protocol):
+    model: str  # 模型名稱，記在向量庫裡；換模型時整庫重算
+
+    def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+class OpenAIEmbedder:
+    model = MODEL
+
+    def __init__(self) -> None:
+        self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        if not self.api_key:
+            raise RuntimeError("混合檢索需要 OPENAI_API_KEY（embedding 一律使用 OpenAI）")
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for i in range(0, len(texts), BATCH):
+            r = requests.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={"model": self.model, "input": texts[i : i + BATCH]},
+                timeout=TIMEOUT,
+            )
+            if r.status_code >= 400:
+                raise RuntimeError(f"Embedding API 錯誤 {r.status_code}：{r.text[:300]}")
+            data = sorted(r.json()["data"], key=lambda d: d["index"])
+            vectors.extend(d["embedding"] for d in data)
+        return vectors

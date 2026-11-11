@@ -71,7 +71,13 @@ async function send(text) {
     if (d.sources && d.sources.length) wait.append(el("div", "refs", "📄 參考資料：" + d.sources.join("、")));
     if (d.retrieved && d.retrieved.length) {
       const det = el("details"); det.append(el("summary", null, `檢索到 ${d.retrieved.length} 段資料（點開看 AI 拿到了什麼）`));
-      d.retrieved.forEach(h => { const div = el("div", "hit"); div.append(el("b", null, `${h.label}　分數 ${h.score}`)); div.append(el("div", null, h.text)); det.append(div); });
+      d.retrieved.forEach(h => {
+        // 有幾種分數就顯示幾種：「相似度 0.62｜關鍵字 12.3」
+        const scores = [];
+        if (h.similarity != null) scores.push(`相似度 ${h.similarity.toFixed(2)}`);
+        if (h.bm25 != null) scores.push(`關鍵字 ${h.bm25.toFixed(1)}`);
+        const div = el("div", "hit"); div.append(el("b", null, `${h.label}　${scores.join("｜")}`)); div.append(el("div", null, h.text)); det.append(div);
+      });
       wait.append(det);
     }
     if (d.seconds) wait.append(el("div", "meta", `${d.seconds} 秒 · ${d.provider}`));
