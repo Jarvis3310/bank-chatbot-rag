@@ -6,7 +6,7 @@ from qdrant_client import QdrantClient
 
 import app
 from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder
-from rag import RAG
+from chatbot.rag import RAG
 
 
 def test_embedding失敗時網頁聊天API仍回200和答案(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

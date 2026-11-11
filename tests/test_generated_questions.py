@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from conftest import CHUNKS, FEE_Q, FEE_RULES, KB, FakeClock, FakeEmbedder, FakeGenerator, wait_until
-from rag import RAG, Chunk, load_chunks
-from embedding import text_hash
-from vector_index import VectorIndex
+from chatbot.rag import RAG, Chunk, load_chunks
+from chatbot.indexing.embedding import text_hash
+from chatbot.retrieval.vector_index import VectorIndex
 
 
 def build(tmp_path: Path, generator: FakeGenerator, chunks: list[Chunk] = CHUNKS, store: str = "vectors", **kw) -> FakeEmbedder:

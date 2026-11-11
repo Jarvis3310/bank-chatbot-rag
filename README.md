@@ -5,20 +5,20 @@
 知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 8 份文件、37 個段落。
 
 ```
-LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段 ──► llm.py：依段落回答 ──► 回覆 + 參考資料
+LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關的 4 段 ──► chatbot/llm.py：依段落回答 ──► 回覆 + 參考資料
 ```
 
 | 檔案 | 用途 |
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
-| `rag.py` | 切段、混合檢索（向量＋BM25（含同義詞表），用 RRF 合併）、組 prompt、解析出處 |
-| `vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
-| `fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
-| `embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-large`，一律用 `OPENAI_API_KEY` |
-| `questions.py` | 建庫時替每段生成 3 個客戶可能的口語問法，跟段落一起算向量：OpenAI `gpt-4o-mini`，一律用 `OPENAI_API_KEY` |
+| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25（含同義詞表），用 RRF 合併）、組 prompt、解析出處 |
+| `chatbot/llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
+| `chatbot/retrieval/vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
+| `chatbot/retrieval/fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
+| `chatbot/indexing/embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-large`，一律用 `OPENAI_API_KEY` |
+| `chatbot/indexing/questions.py` | 建庫時替每段生成 3 個客戶可能的口語問法，跟段落一起算向量：OpenAI `gpt-4o-mini`，一律用 `OPENAI_API_KEY` |
 | `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，換 embedding 或生成問法的模型時自動整庫重算，不進版控 |
-| `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
 | `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）與 20 題驗證題組（沒拿來調門檻，只回報）只測檢索；`--answer` 時另跑 14 題簡報題組 |
 | `tests/` | 單元測試（用假 embedding，不呼叫 API），共用設定在 `tests/conftest.py`；安裝與執行見下方「跑測試」 |

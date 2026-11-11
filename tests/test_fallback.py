@@ -6,7 +6,7 @@ import pytest
 from qdrant_client import QdrantClient
 
 from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder, FakeClock
-from rag import RAG
+from chatbot.rag import RAG
 
 
 def test_embedding報錯時切到退回模式不丟例外(tmp_path: Path) -> None:

@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from conftest import FEE_Q, FEE_RULES, KB, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup, wait_until
-from rag import RAG
+from chatbot.rag import RAG
 
 
 def copy_kb(tmp_path: Path) -> Path:

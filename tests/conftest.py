@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-import vector_index
+from chatbot.retrieval import vector_index
 
-from rag import load_chunks
+from chatbot.rag import load_chunks
 
 KB = Path(__file__).resolve().parent.parent / "kb"
 CHUNKS = load_chunks(KB)

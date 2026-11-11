@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-import llm
-from embedding import Embedder, OpenAIEmbedder
-from fallback import degrade
-from questions import OpenAIQuestionGenerator, QuestionGenerator
-from vector_index import VectorIndex
+from chatbot import llm
+from chatbot.indexing.embedding import Embedder, OpenAIEmbedder
+from chatbot.retrieval.fallback import degrade
+from chatbot.indexing.questions import OpenAIQuestionGenerator, QuestionGenerator
+from chatbot.retrieval.vector_index import VectorIndex
 
 # 口語 → 知識庫用語。BM25 只比對字面，這張表補上常見說法。
 SYNONYMS = {

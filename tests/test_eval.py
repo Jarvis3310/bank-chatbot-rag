@@ -5,7 +5,7 @@ import pytest
 
 from conftest import KB
 from eval import DEMO_CASES, HOLDOUT_CASES, DemoCase, check_demo, contains_keyword, leaks_system_prompt
-from rag import Answer, load_chunks
+from chatbot.rag import Answer, load_chunks
 
 
 @pytest.mark.parametrize("text", ["手續費 5 元。", "跨行提款每次 5 元", "5 元"])

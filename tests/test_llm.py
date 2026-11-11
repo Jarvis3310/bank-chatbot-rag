@@ -1,7 +1,7 @@
 """LLM 呼叫送出的參數。requests.post 換成假的，不呼叫 API。"""
 import pytest
 
-import llm
+from chatbot import llm
 
 RESPONSES = {
     "anthropic": {"content": [{"type": "text", "text": "好的"}]},

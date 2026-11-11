@@ -6,7 +6,7 @@ from qdrant_client import QdrantClient
 
 import eval as eval_module
 from conftest import KB, FakeEmbedder
-from rag import RAG, Mode
+from chatbot.rag import RAG, Mode
 
 
 class WrongKeyEmbedder(FakeEmbedder):
