@@ -1,6 +1,6 @@
 # 兩津商業銀行 AI 客服（RAG + LINE Bot demo）
 
-客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → LLM 只根據這些段落回答，並附上出處；知識庫沒有的就回答查不到，不亂編。
+客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → RAG＋LLM 機器人的 LLM 只根據這些段落回答，並附上出處；知識庫沒有的就回答查不到，不亂編。
 
 知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 8 份文件、37 個段落。
 
@@ -13,7 +13,7 @@ LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關�
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
 | `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
-| `chatbot/llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
+| `chatbot/llm.py` | RAG＋LLM 機器人的 LLM：OpenAI `gpt-4o-mini`（`OPENAI_API_KEY`） |
 | `chatbot/retrieval/keyword.py` | 關鍵字檢索：字元 bigram 斷詞、同義詞表、BM25；退回模式只靠它 |
 | `chatbot/retrieval/vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
 | `chatbot/retrieval/fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
@@ -39,13 +39,13 @@ copy .env.example .env
 python app.py
 ```
 
-打開 http://localhost:8000 就是網頁聊天。這時 `.env` 的 `LLM_PROVIDER=none`，系統會直接回最相關的段落，可以先確認檢索正常。
+打開 http://localhost:8000 就是網頁聊天。填好 `OPENAI_API_KEY` 後，左邊的純 RAG 機器人直接回最相關的段落，可以先確認檢索正常；右邊的 RAG＋LLM 機器人由 LLM 依段落回答（見下方「接上 LLM」）。
 
-服務有兩個機器人，共用同一份檢索與向量庫。`POST /api/chat` 用 `bot` 指定：`"rag"` 是純 RAG 機器人（只用當題檢索，回第 1 名段落原文，不記對話、不用 LLM，跟 `LLM_PROVIDER` 無關）；`"rag_llm"` 是 RAG＋LLM 機器人（預設，記最近 3 輪對話，LINE 也接這個）。兩個機器人的對話紀錄分開。
+服務有兩個機器人，共用同一份檢索與向量庫。`POST /api/chat` 用 `bot` 指定：`"rag"` 是純 RAG 機器人（只用當題檢索，回第 1 名段落原文，不記對話、不用 LLM）；`"rag_llm"` 是 RAG＋LLM 機器人（預設，由 LLM 依前 4 段回答並標出處，記最近 3 輪對話，LINE 也接這個）。兩個機器人的對話紀錄分開。
 
-檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`（跟 `LLM_PROVIDER` 選哪家無關）。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
+檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
 
-建庫時還會額外呼叫 OpenAI `gpt-4o-mini`，替每段寫 3 個客戶可能的口語問法，跟段落一起算向量，讓口語問題比較容易對到正確段落（同樣用 `OPENAI_API_KEY`，跟 `LLM_PROVIDER` 無關）。從零生成（目前 37 段）每段呼叫一次，約 10 秒、生成問法約 0.002 美元（加上 embedding 約 0.003 美元）。生成失敗（沒額度、逾時、斷線）時，該段先只用段落算向量，服務照常，冷卻 60 秒後再重試。
+建庫時還會額外呼叫 OpenAI `gpt-4o-mini`，替每段寫 3 個客戶可能的口語問法，跟段落一起算向量，讓口語問題比較容易對到正確段落（同樣用 `OPENAI_API_KEY`）。從零生成（目前 37 段）每段呼叫一次，約 10 秒、生成問法約 0.002 美元（加上 embedding 約 0.003 美元）。生成失敗（沒額度、逾時、斷線）時，該段先只用段落算向量，服務照常，冷卻 60 秒後再重試。
 
 **第一次建 RAG 時會同步建庫與生成問法**（上述約 10 秒），建完才開始服務。`python app.py` 啟動時就會先建好；改用 WSGI 伺服器（例如 gunicorn）啟動時，RAG 是第一個請求才建立，第一位客戶會等到建庫完成，所以要先預熱（啟動後先送一題，或在載入應用程式時就建好 RAG）。建庫或補建失敗（例如第一次啟動就斷網）時，系統先用退回模式回答，並由背景每 60 秒自動重試，不必等人發問，網路恢復後最多約 60 秒就回到混合檢索。
 
@@ -86,25 +86,17 @@ python -m pytest
 
 ## 2. 接上 LLM
 
-編輯 `.env`，三選一：
+RAG＋LLM 機器人一律用 OpenAI `gpt-4o-mini`，只需要在 `.env` 設定同一把 key（跟 embedding 共用）：
 
 ```ini
-# Claude
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
-
-# Azure OpenAI（DEPLOYMENT 是 Azure 上的「部署名稱」）
-LLM_PROVIDER=azure
-AZURE_OPENAI_API_KEY=...
-AZURE_OPENAI_ENDPOINT=https://<資源名稱>.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=...
 ```
 
-預設模型：Claude 用 `claude-sonnet-5-5`、OpenAI 用 `gpt-4o-mini`，要換就設定 `LLM_MODEL=`。不論 LLM 選哪家，`OPENAI_API_KEY` 都要設定（混合檢索的 embedding 用）。停掉服務後跑一次評測，再重啟 `python app.py`：
+已移除 `LLM_PROVIDER`、`LLM_MODEL`、Claude 與 Azure OpenAI 的設定，`.env` 裡殘留的這些變數會被忽略。純 RAG 機器人不呼叫 LLM，沒有 key 也能回答（但混合檢索的 embedding 需要 key，否則走退回模式）。
+
+沒有 `OPENAI_API_KEY`、或 LLM 呼叫失敗（逾時、額度用完）時，RAG＋LLM 機器人回「目前無法產生回覆，請稍後再試，或撥打 24 小時客服專線」，這一輪不記進對話紀錄；純 RAG 機器人與整個服務不受影響。
+
+停掉服務後跑一次評測，再重啟 `python app.py`：
 
 ```powershell
 python eval.py --answer
