@@ -132,3 +132,73 @@ def test_意圖呼叫帶最近3輪對話供追問改寫使用() -> None:
     assert system == INTENT_PROMPT
     assert [m["content"] for m in messages[:-1]] == ["問題2", "回答2", "問題3", "回答3", "問題4", "回答4"]
     assert "你好" in messages[-1]["content"]
+
+
+# ---- #24 追問改寫：檢索用改寫後的問題 ----
+
+def _record_queries(rag: RAG, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    queries: list[str] = []
+    real = rag.retrieve
+    monkeypatch.setattr(rag, "retrieve", lambda q: (queries.append(q), real(q))[1])
+    return queries
+
+
+def test_追問時檢索用改寫後的問題_創辦人生日(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = FakeChat(replies=[intent_json("kb", "", "創辦人阿兩的生日是哪天"), "阿兩生於 1958 年 3 月 12 日【1】"])
+    rag = make_rag(chat)
+    queries = _record_queries(rag, monkeypatch)
+    history = [("你們創辦人是誰", "創辦人是阿兩。")]
+
+    ans = rag.answer("他生日是哪天", history)
+
+    assert queries == ["創辦人阿兩的生日是哪天"]
+    assert ans.rewritten_question == "創辦人阿兩的生日是哪天"
+    assert "創辦人" in ans.retrieved[0].chunk.label
+    assert "1958 年 3 月 12 日" in ans.text
+
+
+def test_追問時檢索用改寫後的問題_補發手續費(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = FakeChat(replies=[intent_json("kb", "", "信用卡補發新卡的手續費要多少錢"), "補發手續費 200 元【1】"])
+    rag = make_rag(chat)
+    queries = _record_queries(rag, monkeypatch)
+    history = [("信用卡不見了", "請立即撥打掛失專線。")]
+
+    ans = rag.answer("補發要多少錢", history)
+
+    assert queries == ["信用卡補發新卡的手續費要多少錢"]
+    assert "信用卡" in ans.retrieved[0].chunk.label
+    assert "200 元" in ans.retrieved[0].chunk.text and "200 元" in ans.text
+
+
+def test_新話題時改寫結果就是原問題_不被上一題帶偏(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = FakeChat(replies=[intent_json("kb", "", "房貸最多可以貸幾成"), "最高可貸八成【1】"])
+    rag = make_rag(chat)
+    queries = _record_queries(rag, monkeypatch)
+    history = [("信用卡不見了", "請立即撥打掛失專線。")]
+
+    ans = rag.answer("房貸最多可以貸幾成", history)
+
+    assert queries == ["房貸最多可以貸幾成"]  # 不含「信用卡」
+    assert "房" in ans.retrieved[0].chunk.label
+
+
+def test_改寫欄位空白時退回用原問題檢索(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = FakeChat(replies=[intent_json("kb", "", ""), "可以【1】"])
+    rag = make_rag(chat)
+    queries = _record_queries(rag, monkeypatch)
+
+    rag.answer(FALLBACK_Q, [("信用卡不見了", "請撥打掛失專線。")])
+
+    assert queries == [FALLBACK_Q]
+
+
+def test_不再用規則判斷追問() -> None:
+    import chatbot.rag as rag_module
+
+    assert not hasattr(rag_module, "is_followup")
+    assert not hasattr(rag_module, "FOLLOWUP_START")
+
+
+def test_提示詞寫明追問改寫規則() -> None:
+    assert "完整問題" in INTENT_PROMPT
+    assert "原問題" in INTENT_PROMPT and "新話題" in INTENT_PROMPT
