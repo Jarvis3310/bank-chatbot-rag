@@ -139,3 +139,9 @@ def test_沒加answer不跑這兩組也不呼叫LLM(tmp_path: Path, capsys: pyte
     out = capsys.readouterr().out
     assert "【意圖題組】" not in out and "【追問題組】" not in out
     assert chat.calls == []
+
+
+def test_意圖題組含本行自身資訊的邊界題() -> None:
+    cases = dict(eval_module.INTENT_CASES)
+    assert cases["你們創辦人是誰"] is Intent.KNOWLEDGE_BASE
+    assert cases["你們幾點開門"] is Intent.KNOWLEDGE_BASE
