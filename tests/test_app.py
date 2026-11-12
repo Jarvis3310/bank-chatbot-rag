@@ -151,3 +151,11 @@ def test_LLM失敗時RAG加LLM機器人回錯誤訊息_純RAG照常_不記進對
     assert "(02) 2999-8888" in llm_body["answer"] and llm_body["sources"] == []
     assert FALLBACK_SECTION in rag_body["sources"][0]
     assert len(app.histories[("rag_llm", "t")]) == 0
+
+
+def test_首頁同一題分別問純RAG與RAG加LLM兩個機器人() -> None:
+    html = app.app.test_client().get("/").get_data(as_text=True)
+
+    assert '"rag"' in html and '"rag_llm"' in html  # 兩欄各用 bot 參數呼叫 /api/chat
+    assert "純 RAG" in html and "RAG＋LLM" in html
+    assert "intent" not in html and "意圖" not in html  # 網頁不顯示意圖和改寫後的問題
