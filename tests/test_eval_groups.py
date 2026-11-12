@@ -145,3 +145,42 @@ def test_意圖題組含本行自身資訊的邊界題() -> None:
     cases = dict(eval_module.INTENT_CASES)
     assert cases["你們創辦人是誰"] is Intent.KNOWLEDGE_BASE
     assert cases["你們幾點開門"] is Intent.KNOWLEDGE_BASE
+
+
+def test_意圖呼叫失敗退回查詢知識庫時意圖題組算錯並標記(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    intents = {q: i.value for q, i in eval_module.INTENT_CASES}
+    chat = ScriptedChat(intents)
+    rag = _rag(chat, tmp_path)
+    real = chat.__call__
+    chat_fail_on = "信用卡不見了怎麼辦"  # 預期是查詢知識庫：失敗退回的結果和預期一樣，仍要算錯
+
+    def flaky(system: str, messages: list[dict]) -> str:
+        if system == INTENT_PROMPT and messages[-1]["content"] == chat_fail_on:
+            raise RuntimeError("429")
+        return real(system, messages)
+
+    rag._chat = flaky
+
+    passed, total = eval_module.run_intent_group(rag)
+
+    out = capsys.readouterr().out
+    assert passed == total - 1
+    assert "意圖呼叫失敗" in out
+
+
+def test_追問題組第二題LLM失敗時算錯(tmp_path: Path) -> None:
+    case = eval_module.FOLLOWUP_CASES[0]
+    chat = ScriptedChat(answers={case.second: {"answer": f"{case.keyword}", "gap": False}})
+    rag = _rag(chat, tmp_path)
+    real = chat.__call__
+
+    def broken_second(system: str, messages: list[dict]) -> str:
+        if system == SYSTEM_PROMPT and case.second in messages[-1]["content"]:
+            raise RuntimeError("429")
+        return real(system, messages)
+
+    rag._chat = broken_second
+
+    passed, _ = eval_module.run_followup_group(rag)
+
+    assert passed < len(eval_module.FOLLOWUP_CASES)

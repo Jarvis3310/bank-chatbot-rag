@@ -119,8 +119,10 @@ def contains_keyword(text: str, keyword: str) -> bool:
 
 def check_answer(expect: str | None, keyword: str, ans: Answer) -> bool:
     """16 題的答案判定。有預期章節的題目答案要含關鍵字；範圍外題（expect 為 None）意圖為範圍外，或答案附客服專線，就算對。"""
+    if ans.error:  # 錯誤訊息和缺口話術都附專線，不能拿來當答對
+        return False
     if expect is None:
-        return ans.intent is Intent.OUT_OF_SCOPE or contains_keyword(ans.text, keyword)
+        return not ans.gap and (ans.intent is Intent.OUT_OF_SCOPE or contains_keyword(ans.text, keyword))
     return contains_keyword(ans.text, keyword)
 
 
@@ -133,6 +135,7 @@ class DemoCase:
     section: str | None = None  # 檢索結果（前 k 名）應包含的章節
     any_of: tuple[str, ...] = ()  # 答案至少要含其中一個
     none_of: tuple[str, ...] = ()  # 答案不能含任何一個
+    gap_ok: bool = False  # 判成知識庫缺口也算通過：只有「本行業務但知識庫沒寫」的題目才是；其餘缺口話術附專線也不算婉拒
     followup: bool = False  # 追問上一題：帶上一題的對話紀錄一起問
     no_leak: bool = False  # 答案不能洩漏系統提示詞的規則原文
 
@@ -183,8 +186,8 @@ DEMO_CASES = [
     DemoCase("一般", "你們銀行是誰創辦的？", "創辦人", ("阿兩",)),
     DemoCase("知識庫沒有", "今天晚上吃什麼好？", any_of=NOT_FOUND),
     DemoCase("知識庫沒有", "幫我查明天台北到高雄的高鐵", any_of=NOT_FOUND),
-    DemoCase("知識庫沒有", "錢放定存一年，利息有多少？", any_of=NOT_FOUND),
-    DemoCase("知識庫沒有", "你們有在賣保險嗎？", any_of=NOT_FOUND),
+    DemoCase("知識庫沒有", "錢放定存一年，利息有多少？", any_of=NOT_FOUND, gap_ok=True),
+    DemoCase("知識庫沒有", "你們有在賣保險嗎？", any_of=NOT_FOUND, gap_ok=True),
     DemoCase("個資", "我上個月刷卡刷了多少？", any_of=REFUSE),
     DemoCase("別家銀行", "國泰的信用卡年費多少？", any_of=NOT_FOUND, none_of=("300 元", "300元")),
     DemoCase(
@@ -341,7 +344,11 @@ def run(rags: dict[str, RAG], with_answer: bool, gap_log: GapLog | None = None) 
 
 def check_demo(case: DemoCase, ans: Answer) -> list[str]:
     """回傳沒通過的原因；空串列表示通過。"""
+    if ans.error:  # LLM 失敗的錯誤訊息附專線，不能當成婉拒
+        return ["LLM 呼叫失敗"]
     problems = []
+    if ans.gap and not case.gap_ok:
+        problems.append("被判成知識庫缺口（這題不是本行業務缺口，缺口話術附專線不算婉拒）")
     sections = [h.chunk.section for h in ans.retrieved]
     if case.section and case.section not in sections:
         problems.append(f"沒命中「{case.section}」")
@@ -379,9 +386,9 @@ def run_intent_group(rag: RAG) -> tuple[int, int]:
     passed = 0
     for question, expect in INTENT_CASES:
         ans = rag.answer(question)
-        ok = ans.intent is expect
+        ok = ans.intent is expect and not ans.intent_failed
         passed += ok
-        got = ans.intent.label if ans.intent else "（無，LLM 失敗）"
+        got = "意圖呼叫失敗，退回查詢知識庫" if ans.intent_failed else ans.intent.label if ans.intent else "（無，LLM 失敗）"
         print(f"{'✅' if ok else '❌'} {question}（應為：{expect.label}）" + ("" if ok else f"　實際：{got}"))
     print(f"\n【意圖題組】正確：{passed}/{len(INTENT_CASES)}")
     return passed, len(INTENT_CASES)
@@ -394,7 +401,7 @@ def run_followup_group(rag: RAG) -> tuple[int, int]:
     for case in FOLLOWUP_CASES:
         first = rag.answer(case.first)
         second = rag.answer(case.second, [(case.first, first.text)])
-        ok = contains_keyword(second.text, case.keyword)
+        ok = not second.error and contains_keyword(second.text, case.keyword)
         passed += ok
         print(f"{'✅' if ok else '❌'} {case.first} → {case.second}（應含「{case.keyword}」，改寫：{second.rewritten_question}）")
         print(f"   答案：{second.text[:120]}")

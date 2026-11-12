@@ -221,3 +221,13 @@ def test_提示詞寫明查個人帳戶只限查詢自己的資料_操作問題�
 def test_提示詞要求範圍外回覆一定附客服專線() -> None:
     rule = next(line for line in INTENT_PROMPT.splitlines() if line.startswith("3. 範圍外"))
     assert "一定" in rule and "(02) 2999-8888" in rule
+
+
+def test_LLM判成查詢知識庫與呼叫失敗退回查詢知識庫可以分辨() -> None:
+    judged = make_rag(FakeChat(replies=[intent_json("kb", "", FALLBACK_Q)])).answer(FALLBACK_Q)
+    api_down = make_rag(FakeChat(replies=[RuntimeError("429")])).answer(FALLBACK_Q)
+    bad_format = make_rag(FakeChat(replies=["不是 JSON"])).answer(FALLBACK_Q)
+
+    assert judged.intent is Intent.KNOWLEDGE_BASE and not judged.intent_failed
+    for ans in (api_down, bad_format):
+        assert ans.intent is Intent.KNOWLEDGE_BASE and ans.intent_failed

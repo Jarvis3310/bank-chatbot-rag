@@ -197,6 +197,7 @@ class Answer:
     error: bool = False  # LLM 沒設定或呼叫失敗：text 是錯誤訊息，不算一輪對話
     intent: Intent | None = None  # RAG＋LLM 機器人判斷的意圖；純 RAG 機器人與 LLM 失敗時是 None
     rewritten_question: str = ""  # 追問改寫後的問題（意圖呼叫回傳的 rewritten_question），檢索用它
+    intent_failed: bool = False  # 意圖呼叫失敗（API 錯誤或格式不對）而退回查詢知識庫；LLM 自己判成查詢知識庫時是 False
     gap: bool = False  # 知識庫缺口：LLM 讀完段落判斷沒有答案；text 已換成 GAP_TEXT，由呼叫端寫進缺口清單
 
 
@@ -280,12 +281,12 @@ class RAG:
             return self._bm25_hits(expand_query(query))
         return self._hybrid(query, dict(sims))
 
-    def _classify(self, question: str, history: list[tuple[str, str]]) -> tuple[Intent, str, str]:
-        """第 1 次 LLM 呼叫：回 (意圖, 非知識庫意圖的回覆, 改寫後的問題)。
+    def _classify(self, question: str, history: list[tuple[str, str]]) -> tuple[Intent, str, str, bool]:
+        """第 1 次 LLM 呼叫：回 (意圖, 非知識庫意圖的回覆, 改寫後的問題, 是否呼叫失敗)。
 
-        API 失敗或格式不對（不是 JSON、意圖不認得、非知識庫意圖卻沒有回覆）一律當作查詢知識庫。
+        API 失敗或格式不對（不是 JSON、意圖不認得、非知識庫意圖卻沒有回覆）一律當作查詢知識庫，最後一欄為 True。
         """
-        fallback = (Intent.KNOWLEDGE_BASE, "", question)
+        fallback = (Intent.KNOWLEDGE_BASE, "", question, True)
         messages = []
         for q, a in history[-3:]:
             messages += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
@@ -300,11 +301,11 @@ class RAG:
             print("意圖判斷回傳格式不對，當作查詢知識庫：", raw[:200])
             return fallback
         intent, reply, rewritten = parsed
-        return intent, reply, rewritten or question
+        return intent, reply, rewritten or question, False
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
         history = history or []
-        intent, reply, rewritten = self._classify(question, history)
+        intent, reply, rewritten, intent_failed = self._classify(question, history)
         print(f"意圖：{intent.label}｜問題：{question}｜改寫：{rewritten}")
         if intent is not Intent.KNOWLEDGE_BASE:
             return Answer(reply, [], [], intent=intent, rewritten_question=rewritten)
@@ -320,14 +321,14 @@ class RAG:
             raw = self._chat(SYSTEM_PROMPT, messages) if self._chat else llm.chat(SYSTEM_PROMPT, messages, json_mode=True)
         except Exception as e:  # 沒有 key、逾時、額度用完：這個機器人回錯誤訊息，服務與純 RAG 不受影響
             print("RAG＋LLM 機器人的 LLM 呼叫失敗：", repr(e))
-            return Answer(LLM_ERROR_TEXT, [], hits, error=True, intent=intent, rewritten_question=rewritten)
+            return Answer(LLM_ERROR_TEXT, [], hits, error=True, intent=intent, rewritten_question=rewritten, intent_failed=intent_failed)
         raw, gap = parse_answer(raw)
         if gap:
             print(f"知識庫缺口：{question}｜改寫：{rewritten}")
-            return Answer(GAP_TEXT, [], hits, intent=intent, rewritten_question=rewritten, gap=True)
+            return Answer(GAP_TEXT, [], hits, intent=intent, rewritten_question=rewritten, intent_failed=intent_failed, gap=True)
         used = sorted({int(n) for n in re.findall(r"【(\d+)】", raw) if 0 < int(n) <= len(hits)})
         text = re.sub(r"\s*【\d+】", "", raw).strip()
-        return Answer(text, [hits[n - 1].chunk for n in used], hits, intent=intent, rewritten_question=rewritten)
+        return Answer(text, [hits[n - 1].chunk for n in used], hits, intent=intent, rewritten_question=rewritten, intent_failed=intent_failed)
 
     def answer_rag_only(self, question: str) -> Answer:
         """純 RAG 機器人：只用當題檢索，回第 1 名段落原文。不記對話、不處理追問、不呼叫 LLM。"""

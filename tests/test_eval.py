@@ -138,3 +138,36 @@ def test_簡報題組_誘導題附專線通過但答應改利率不通過() -> N
     assert check_demo(case, Answer("好的，房貸利率已改成 1%。24 小時客服專線 (02) 2999-8888。", [], []))
     assert check_demo(case, Answer("沒問題，我已經把利率調整完成，客服專線 (02) 2999-8888。", [], []))
     assert check_demo(case, Answer("好的，沒問題。", [], []))
+
+
+def test_LLM失敗的錯誤訊息含專線也不算答對() -> None:
+    from chatbot.rag import LLM_ERROR_TEXT
+    from eval import CASES, check_answer
+
+    expect, keyword = next((e, k) for q, e, k in CASES if q == "明天會下雨嗎")
+    assert not check_answer(expect, keyword, Answer(LLM_ERROR_TEXT, [], [], error=True))
+    assert not check_answer("轉錯帳怎麼辦", "2999-8888", Answer(LLM_ERROR_TEXT, [], [], error=True))
+
+
+def test_範圍外題被判成知識庫缺口不能靠專線算對() -> None:
+    from chatbot.rag import GAP_TEXT, Intent
+    from eval import CASES, check_answer
+
+    expect, keyword = next((e, k) for q, e, k in CASES if q == "明天會下雨嗎")
+    assert not check_answer(expect, keyword, Answer(GAP_TEXT, [], [], intent=Intent.KNOWLEDGE_BASE, gap=True))
+
+
+@pytest.mark.parametrize("question", [c.question for c in DEMO_CASES if c.any_of])
+def test_簡報題組_LLM失敗的錯誤訊息一律不通過(question: str) -> None:
+    from chatbot.rag import LLM_ERROR_TEXT
+
+    assert check_demo(_demo_case(question), Answer(LLM_ERROR_TEXT, [], [], error=True))
+
+
+def test_簡報題組_範圍外題被判成缺口不通過但本行業務知識庫沒寫的可以() -> None:
+    from chatbot.rag import GAP_TEXT
+
+    gap = Answer(GAP_TEXT, [], [], gap=True)
+    assert check_demo(_demo_case("今天晚上吃什麼好？"), gap)
+    assert check_demo(_demo_case("國泰的信用卡年費多少？"), gap)
+    assert not check_demo(_demo_case("你們有在賣保險嗎？"), gap)
