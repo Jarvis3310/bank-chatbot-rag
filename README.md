@@ -106,7 +106,7 @@ python eval.py --answer
 
 1. 到 [LINE Official Account Manager](https://manager.line.biz/) 用 LINE 帳號登入，建立一個官方帳號（名稱可取「兩津商業銀行客服 demo」）。
 2. 進入該帳號 › 右上「設定」› **Messaging API** › 啟用。第一次會要求建立 Provider，隨便取名即可。
-3. 在同一頁的 **回應設定**：
+3. 在 LINE Official Account Manager › 設定 › **回應設定**（LINE 只接 RAG＋LLM 機器人，三項都要照下面設，否則使用者會收到 LINE 的罐頭回覆或真人聊天，而不是機器人的答案）：
    - 「聊天」關閉
    - 「自動回應訊息」關閉
    - 「Webhook」開啟
@@ -134,6 +134,8 @@ cloudflared tunnel --url http://localhost:8000
 ```
 
 把它給你的 `https://xxxx.ngrok-free.app` 加上 `/callback`，貼到 LINE Developers Console › Messaging API › **Webhook URL**，按 **Verify** 出現 Success，並確認 **Use webhook** 已開啟。
+
+> 用瀏覽器直接開 `/callback` 會看到 `Method Not Allowed`，這是正常的：webhook 只收 LINE 送來的 POST。Verify 出現 Success 只代表網址和簽章通了，不代表「使用 webhook」已開，兩者要分開確認；沒開的話使用者傳訊息，服務完全不會收到。
 
 > ngrok 免費版每次重開網址都會變，重開後要重新貼 Webhook URL。
 > 公司網路若擋 ngrok，可以改用手機熱點，或直接用網頁聊天版 demo。
