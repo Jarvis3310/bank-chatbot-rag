@@ -27,6 +27,7 @@ from flask import Flask, abort, jsonify, request, send_file
 load_dotenv()
 
 from chatbot import llm  # noqa: E402
+from chatbot.gaps import SOURCE_LINE, SOURCE_WEB, GapLog  # noqa: E402
 from chatbot.rag import RAG, format_for_line  # noqa: E402
 
 BASE = Path(__file__).parent
@@ -61,7 +62,11 @@ BOTS = (BOT_RAG, BOT_RAG_LLM)
 histories: dict[tuple[str, str], deque] = defaultdict(lambda: deque(maxlen=3))
 
 
-def ask(session: str, question: str, bot: str = BOT_RAG_LLM):
+# 知識庫缺口清單：位置由 GAP_LOG_PATH 設定（預設 gaps/kb_gaps.jsonl），測試可以直接換掉
+gap_log = GapLog.from_env()
+
+
+def ask(session: str, question: str, bot: str = BOT_RAG_LLM, source: str = SOURCE_WEB):
     t0 = time.time()
     if bot == BOT_RAG:  # 純 RAG：不記對話、不處理追問、不用 LLM
         return get_rag().answer_rag_only(question), time.time() - t0
@@ -70,6 +75,8 @@ def ask(session: str, question: str, bot: str = BOT_RAG_LLM):
         histories[key].clear()
         return None, 0.0
     ans = get_rag().answer(question, list(histories[key]))
+    if ans.gap:  # 知識庫缺口：記下來交給後台補資料
+        gap_log.record(source, session, question, ans.rewritten_question)
     if not ans.error:  # LLM 失敗的錯誤訊息不算一輪對話
         histories[key].append((question, ans.text))
     return ans, time.time() - t0
@@ -107,7 +114,7 @@ def handle_line_event(ev: dict) -> None:
     # 顯示「輸入中…」動畫（一對一聊天才有效）
     line_post("/chat/loading/start", {"chatId": user_id, "loadingSeconds": 20})
     try:
-        ans, secs = ask(user_id, ev["message"]["text"])
+        ans, secs = ask(user_id, ev["message"]["text"], source=SOURCE_LINE)
         text = "已清除對話紀錄，請問有什麼可以幫您？" if ans is None else format_for_line(ans)
         print(f"[LINE] {ev['message']['text']!r} → {secs:.1f}s")
     except Exception as e:  # demo 時避免使用者完全沒收到回應
