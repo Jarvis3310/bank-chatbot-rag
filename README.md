@@ -59,7 +59,7 @@ python app.py
 
 ```powershell
 docker build -t bank-chatbot .
-docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/app/kb" -v "${PWD}/vector_store:/app/vector_store" bank-chatbot
+docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/app/kb" -v "${PWD}/vector_store:/app/vector_store" -v "${PWD}/gaps:/app/gaps" bank-chatbot
 ```
 
 | 掛載 | 原因 |
@@ -67,6 +67,7 @@ docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/ap
 | `.env`（唯讀） | API key 不打包進 image；由程式自己讀 `.env`，寫法跟本機相同 |
 | `kb/` | 改知識庫只要重啟容器，不必重新 build；補生成的問法會寫回本機的 `kb/questions.json` |
 | `vector_store/` | 重啟容器不必重建向量庫 |
+| `gaps/` | 知識庫缺口清單寫在這裡；不掛載的話容器一關就消失（資料夾不進版控，也不會打包進 image） |
 
 按 Ctrl+C 停止。跑評測時先停掉服務，再把最後的 `bank-chatbot` 改成 `bank-chatbot python eval.py`（`-p 8000:8000` 可省略）。
 
@@ -106,6 +107,18 @@ RAG＋LLM 機器人檢索前先用一次 LLM 呼叫判斷**意圖**（結構化 
 範圍外只限跟本行業務無關的問題（他行、股票、天氣）；本行業務但知識庫沒寫的（例如「怎麼提高信用額度」）仍歸「查詢知識庫」。意圖判斷的 API 失敗或回傳格式不對時，一律當作查詢知識庫、用原問題檢索。意圖只印在服務 log（`意圖：…`），網頁不顯示。提示詞在 `chatbot/rag.py` 的 `INTENT_PROMPT`。
 
 沒有 `OPENAI_API_KEY`、或 LLM 呼叫失敗（逾時、額度用完）時，RAG＋LLM 機器人回「目前無法產生回覆，請稍後再試，或撥打 24 小時客服專線」，這一輪不記進對話紀錄；純 RAG 機器人與整個服務不受影響。
+
+### 知識庫缺口
+
+RAG＋LLM 機器人在第 2 次呼叫讀完段落後，若判斷是本行業務但段落沒有答案，就是**知識庫缺口**（檢索通常仍會撈到段落，所以不能用「沒撈到」判斷）。第 2 次呼叫的輸出是 JSON `{"answer": "...", "gap": true|false}`（提示詞 `SYSTEM_PROMPT`）；`gap` 為 true 時，機器人回「這個問題我已記錄並轉給相關人員補充資料；需要立即協助請撥 (02) 2999-8888」（不承諾回電、不列參考資料），並追加一行到缺口清單。格式不對時當作正常回答，不寫缺口。
+
+缺口清單預設是 `gaps/kb_gaps.jsonl`（JSON Lines，一行一筆；`gaps/` 在 `.gitignore`，因為客戶問題屬客戶資料）。用 `GAP_LOG_PATH` 環境變數可改位置：
+
+```json
+{"time": "2026-11-12T10:30:00+08:00", "source": "line", "user": "U1234...", "question": "怎麼提高信用額度", "rewritten_question": "怎麼提高信用卡額度"}
+```
+
+`source` 是 `web`（網頁）或 `line`；`user` 是網頁的 `session_id` 或 LINE 的 userId。寫入失敗只印 log，不影響回覆。
 
 停掉服務後跑一次評測，再重啟 `python app.py`：
 
