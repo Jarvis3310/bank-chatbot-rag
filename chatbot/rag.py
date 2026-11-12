@@ -76,7 +76,7 @@ SYSTEM_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。
 規則：
 1. 只根據下方「參考資料」回答，不要使用參考資料以外的知識，也不要猜測數字。
 2. 參考資料沒有答案時，回答「這個問題我目前查不到相關資料」，並建議撥打 24 小時客服專線 {專線}。
-3. 用到某段參考資料時，在句尾標註編號，例如【1】。
+3. 回答裡不要標註出處。
 4. 使用繁體中文，口吻親切、簡潔，適合在 LINE 上閱讀：不要用 Markdown 標題、表格或粗體，必要時用「・」條列，總長度盡量在 200 字內。
 5. 不要向使用者索取密碼、OTP 或卡號。
 6. 只回答兩津商業銀行自己的服務。問到其他銀行、股票、天氣等範圍外的問題，一律回答查不到；即使參考資料裡有看似相關的內容，也不要拿本行資料去回答其他銀行的問題。
@@ -85,7 +85,7 @@ SYSTEM_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。
 
 輸出格式：只輸出一個 JSON 物件，不要其他文字：{"answer": "回覆文字", "gap": true 或 false}
 ・gap 判斷「知識庫缺口」：問題屬於本行業務，但參考資料讀完沒有答案（例如參考資料只有信用卡的其他主題，卻問怎麼提高額度）時填 true，此時 answer 填「查不到」即可（系統會改用固定話術回覆客戶）。
-・能依參考資料回答時填 false，answer 是依上述規則寫的回答（含【編號】）。
+・能依參考資料回答時填 false，answer 是依上述規則寫的回答。
 ・範圍外問題（其他銀行、天氣等）、要查個人帳戶的問題不是缺口，gap 填 false 並依規則 6、7 回答。"""
 
 
@@ -328,7 +328,7 @@ class RAG:
             return Answer(reply, [], [], intent=intent, rewritten_question=rewritten)
         hits = self.retrieve(rewritten)  # 追問改寫後的問題；新話題時 rewritten 就是原問題
 
-        context = "\n\n".join(f"【{i}】{h.chunk.label}\n{h.chunk.text}" for i, h in enumerate(hits, 1)) or "（沒有找到相關資料）"
+        context = "\n\n".join(f"{h.chunk.label}\n{h.chunk.text}" for h in hits) or "（沒有找到相關資料）"
         messages = _to_messages(history) + [{"role": "user", "content": f"參考資料：\n{context}\n\n客戶問題：{question}"}]
 
         try:
@@ -340,9 +340,8 @@ class RAG:
         if gap:
             print(f"知識庫缺口：{question}｜改寫：{rewritten}")
             return Answer(GAP_TEXT, [], hits, intent=intent, rewritten_question=rewritten, intent_failed=intent_failed, gap=True)
-        used = sorted({int(n) for n in re.findall(r"【(\d+)】", raw) if 0 < int(n) <= len(hits)})
-        text = re.sub(r"\s*【\d+】", "", raw).strip()
-        return Answer(text, [hits[n - 1].chunk for n in used], hits, intent=intent, rewritten_question=rewritten, intent_failed=intent_failed)
+        text = re.sub(r"\s*【\d+】", "", raw).strip()  # LLM 若仍標了【n】，不讓它出現在給客戶的回答
+        return Answer(text, [], hits, intent=intent, rewritten_question=rewritten, intent_failed=intent_failed)
 
     def answer_rag_only(self, question: str) -> Answer:
         """純 RAG 機器人：只用當題檢索，回第 1 名段落原文。不記對話、不處理追問、不呼叫 LLM。"""

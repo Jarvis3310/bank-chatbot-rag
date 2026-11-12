@@ -3,14 +3,14 @@ import pytest
 
 from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, FakeChat
 from chatbot import llm
-from chatbot.rag import RAG, Mode
+from chatbot.rag import RAG, SYSTEM_PROMPT, Mode, format_for_line
 
 
 def make_rag(chat: FakeChat) -> RAG:
     return RAG(KB, mode=Mode.FALLBACK, chat=chat)
 
 
-def test_送給LLM的是檢索到的段落且回答列出參考資料() -> None:
+def test_送給LLM的是檢索到的段落且回答不列參考資料() -> None:
     chat = FakeChat()
     rag = make_rag(chat)
 
@@ -21,9 +21,15 @@ def test_送給LLM的是檢索到的段落且回答列出參考資料() -> None:
     assert 0 < len(hits) <= 4
     assert all(h.chunk.text in sent for h in hits)
     assert FALLBACK_Q in sent
-    assert ans.text == "可以開外幣帳戶"  # 【1】出處標記從文字拿掉
-    assert [c.section for c in ans.sources] == [FALLBACK_SECTION]  # 出處對應第 1 段
+    assert ans.text == "可以開外幣帳戶"  # LLM 仍輸出的【1】從文字拿掉
+    assert ans.sources == []  # RAG＋LLM 機器人不列參考資料
+    assert [h.chunk.section for h in ans.retrieved][0] == FALLBACK_SECTION  # 檢索結果照舊
     assert not ans.error
+    assert "📄" not in format_for_line(ans)
+
+
+def test_提示詞不再要求標出處() -> None:
+    assert "【" not in SYSTEM_PROMPT and "句尾標註" not in SYSTEM_PROMPT
 
 
 def test_聊到第4輪時只送最近3輪對話() -> None:

@@ -91,7 +91,8 @@ def test_RAG加LLM機器人的回答由LLM生成(tmp_path: Path, monkeypatch: py
 
     for body in (explicit, default):
         assert body["answer"] == "可以開外幣帳戶"
-        assert FALLBACK_SECTION in body["sources"][0]
+        assert body["sources"] == []  # RAG＋LLM 機器人不列參考資料
+        assert body["retrieved"]  # 檢索結果照舊
 
 
 def test_兩個機器人回傳相同欄位(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,18 +1,18 @@
 # 兩津商業銀行 AI 客服（RAG + LINE Bot demo）
 
-客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → RAG＋LLM 機器人的 LLM 只根據這些段落回答，並附上出處；知識庫沒有的就回答查不到，不亂編。
+客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → RAG＋LLM 機器人的 LLM 只根據這些段落回答；知識庫沒有的就回答查不到，不亂編。
 
 知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 8 份文件、37 個段落。
 
 ```
-LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關的 4 段 ──► chatbot/llm.py：依段落回答 ──► 回覆 + 參考資料
+LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關的 4 段 ──► chatbot/llm.py：依段落回答 ──► 回覆
 ```
 
 | 檔案 | 用途 |
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
-| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
+| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析 LLM 回覆 |
 | `chatbot/llm.py` | RAG＋LLM 機器人的 LLM：OpenAI `gpt-4o-mini`（`OPENAI_API_KEY`） |
 | `chatbot/retrieval/keyword.py` | 關鍵字檢索：字元 bigram 斷詞、同義詞表、BM25；退回模式只靠它 |
 | `chatbot/retrieval/vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
@@ -41,7 +41,7 @@ python app.py
 
 打開 http://localhost:8000 就是網頁聊天。填好 `OPENAI_API_KEY` 後，左邊的純 RAG 機器人直接回最相關的段落，可以先確認檢索正常；右邊的 RAG＋LLM 機器人由 LLM 依段落回答（見下方「接上 LLM」）。
 
-服務有兩個機器人，共用同一份檢索與向量庫。`POST /api/chat` 用 `bot` 指定：`"rag"` 是純 RAG 機器人（只用當題檢索，回第 1 名段落原文，不記對話、不用 LLM）；`"rag_llm"` 是 RAG＋LLM 機器人（預設，由 LLM 依前 4 段回答並標出處，記最近 3 輪對話，LINE 也接這個）。兩個機器人的對話紀錄分開。
+服務有兩個機器人，共用同一份檢索與向量庫。`POST /api/chat` 用 `bot` 指定：`"rag"` 是純 RAG 機器人（只用當題檢索，回第 1 名段落原文，不記對話、不用 LLM）；`"rag_llm"` 是 RAG＋LLM 機器人（預設，由 LLM 依前 4 段回答、不列參考資料，記最近 3 輪對話，LINE 也接這個）。兩個機器人的對話紀錄分開。
 
 檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
 
@@ -183,7 +183,7 @@ cloudflared tunnel --url http://localhost:8000
 | 想展示的 | 問法 |
 |---|---|
 | 口語也聽得懂 | 「卡不見了怎麼辦」（知識庫寫的是「遺失」） |
-| 精準數字 + 出處 | 「網銀轉帳一天最多轉多少？」 |
+| 精準數字 | 「網銀轉帳一天最多轉多少？」 |
 | 追問能接上 | 接著問「那手續費呢？」 |
 | 不會亂答 | 「可以幫我買台積電股票嗎？」 |
 | 防詐話術 | 「銀行打電話叫我給 OTP 是真的嗎」 |
