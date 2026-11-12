@@ -5,6 +5,8 @@
 另有一組口語題（同義詞表沒涵蓋的說法），只測檢索，三欄都印第一名結果。
 驗證題組（另外寫、沒拿來調門檻的口語題，含 5 題知識庫查不到的）只測檢索，只回報結果、不當過關條件。
 --answer 時另跑「簡報題組」（週五簡報的現場測試題目），用混合檢索產生答案，逐題印通過與否。
+--answer 時另跑三組 RAG＋LLM 機器人的題目：意圖題組（只檢查意圖、不檢查非知識庫意圖的回覆措辭）、
+追問題組（兩輪對話，第 2 題答案含關鍵字）、知識庫缺口題（判成缺口的寫進暫存資料夾的缺口清單，不污染 gaps/）。
 混合檢索用不了（沒有 OPENAI_API_KEY、embedding API 錯誤）時直接報錯結束，不會默默改用退回模式。
 服務（app.py）跑著時不能同時跑 eval：Qdrant 本機模式會鎖住向量庫資料夾。
 
@@ -15,15 +17,18 @@
 import os
 import re
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from chatbot import llm  # noqa: E402
-from chatbot.rag import RAG, SYSTEM_PROMPT, TOP_K, Answer, Mode  # noqa: E402
+from chatbot.gaps import GapLog  # noqa: E402
+from chatbot.rag import RAG, SYSTEM_PROMPT, TOP_K, Answer, Intent, Mode  # noqa: E402
 
 # (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，檢索結果應為空
 CASES = [
@@ -181,6 +186,43 @@ DEMO_CASES = [
 ]
 
 
+# 意圖題組：(問題, 應判成的意圖)；只檢查意圖，不檢查非知識庫意圖的回覆措辭。含邊界題：
+# 「怎麼提高信用額度」是本行業務（知識庫沒寫也算查詢知識庫）、「國泰的信用卡年費」是別家銀行（範圍外）
+INTENT_CASES = [
+    ("信用卡不見了怎麼辦", Intent.KNOWLEDGE_BASE),
+    ("跨行轉帳手續費多少", Intent.KNOWLEDGE_BASE),
+    ("怎麼提高信用額度", Intent.KNOWLEDGE_BASE),
+    ("你好", Intent.GREETING),
+    ("謝謝你的幫忙", Intent.GREETING),
+    ("今天天氣如何", Intent.OUT_OF_SCOPE),
+    ("幫我推薦台積電股票", Intent.OUT_OF_SCOPE),
+    ("國泰的信用卡年費多少", Intent.OUT_OF_SCOPE),
+    ("我的餘額多少", Intent.ACCOUNT),
+    ("我上個月刷卡刷了多少", Intent.ACCOUNT),
+    ("我要找真人", Intent.HUMAN),
+    ("幫我轉接專人客服", Intent.HUMAN),
+]
+
+
+@dataclass
+class FollowupCase:
+    """追問題組的一題：兩輪對話，第 2 題的答案要含關鍵字。"""
+
+    first: str
+    second: str
+    keyword: str
+
+
+FOLLOWUP_CASES = [
+    FollowupCase("你們創辦人是誰", "他生日是哪天", "1958"),
+    FollowupCase("信用卡不見了", "補發要多少錢", "200"),
+]
+
+# 知識庫缺口題：本行業務但知識庫沒寫，應被判成缺口
+GAP_CASES = ["怎麼提高信用額度", "信用卡急用想預借現金，手續費怎麼算"]
+GAP_SOURCE = "eval"
+
+
 # 檢索模式 → 欄位名稱（依印出順序）
 COLUMNS = {Mode.FALLBACK: "退回模式", Mode.BM25_ONLY: "純 BM25", Mode.HYBRID: "混合檢索"}
 ANSWER_COLUMN = COLUMNS[Mode.HYBRID]  # 答案只用服務實際使用的模式產生
@@ -238,7 +280,12 @@ def exit_unusable(e: Exception) -> None:
     sys.exit(f"混合檢索用不了：{' '.join(str(e).split())}")
 
 
-def run(rags: dict[str, RAG], with_answer: bool) -> None:
+def eval_gap_log() -> GapLog:
+    """eval 專用的缺口清單：寫在暫存資料夾，不污染正式的 gaps/。"""
+    return GapLog(Path(tempfile.gettempdir()) / "bank-chatbot-eval-gaps" / "kb_gaps.jsonl")
+
+
+def run(rags: dict[str, RAG], with_answer: bool, gap_log: GapLog | None = None) -> None:
     scores = {name: Score() for name in rags}
     ans_ok = 0
     times = []
@@ -268,6 +315,11 @@ def run(rags: dict[str, RAG], with_answer: bool) -> None:
     print_holdout(rags)
     if with_answer:
         print_demo(rags[ANSWER_COLUMN])
+        rag = rags[ANSWER_COLUMN]
+        gap_log = gap_log or eval_gap_log()
+        run_intent_group(rag)
+        run_followup_group(rag)
+        run_gap_group(rag, gap_log)
 
 
 def check_demo(case: DemoCase, ans: Answer) -> list[str]:
@@ -302,6 +354,49 @@ def print_demo(rag: RAG) -> None:
             print(f"   原因：{'；'.join(problems)}")
         print(f"   答案：{ans.text[:120]}")
     print(f"\n【簡報題組】通過：{passed}/{len(DEMO_CASES)}")
+
+
+def run_intent_group(rag: RAG) -> tuple[int, int]:
+    """意圖題組：每題單獨問（不帶對話紀錄），只比對意圖。回 (答對, 總題數)。"""
+    print("\n=== 意圖題組（RAG＋LLM 機器人，只檢查意圖）===")
+    passed = 0
+    for question, expect in INTENT_CASES:
+        ans = rag.answer(question)
+        ok = ans.intent is expect
+        passed += ok
+        got = ans.intent.label if ans.intent else "（無，LLM 失敗）"
+        print(f"{'✅' if ok else '❌'} {question}（應為：{expect.label}）" + ("" if ok else f"　實際：{got}"))
+    print(f"\n【意圖題組】正確：{passed}/{len(INTENT_CASES)}")
+    return passed, len(INTENT_CASES)
+
+
+def run_followup_group(rag: RAG) -> tuple[int, int]:
+    """追問題組：先問第 1 題，帶著它的對話紀錄問第 2 題，第 2 題答案要含關鍵字。回 (答對, 總題數)。"""
+    print("\n=== 追問題組（RAG＋LLM 機器人，兩輪對話）===")
+    passed = 0
+    for case in FOLLOWUP_CASES:
+        first = rag.answer(case.first)
+        second = rag.answer(case.second, [(case.first, first.text)])
+        ok = contains_keyword(second.text, case.keyword)
+        passed += ok
+        print(f"{'✅' if ok else '❌'} {case.first} → {case.second}（應含「{case.keyword}」，改寫：{second.rewritten_question}）")
+        print(f"   答案：{second.text[:120]}")
+    print(f"\n【追問題組】正確：{passed}/{len(FOLLOWUP_CASES)}")
+    return passed, len(FOLLOWUP_CASES)
+
+
+def run_gap_group(rag: RAG, gap_log: GapLog) -> tuple[int, int]:
+    """知識庫缺口題：判成缺口的寫進 gap_log（eval 傳暫存位置）。回 (判成缺口, 總題數)。"""
+    print(f"\n=== 知識庫缺口題（RAG＋LLM 機器人；缺口清單：{gap_log.path}）===")
+    passed = 0
+    for question in GAP_CASES:
+        ans = rag.answer(question)
+        if ans.gap:
+            gap_log.record(GAP_SOURCE, "eval", question, ans.rewritten_question)
+        passed += ans.gap
+        print(f"{'✅' if ans.gap else '❌'} {question}（應判成缺口）")
+    print(f"\n【知識庫缺口題】判成缺口：{passed}/{len(GAP_CASES)}")
+    return passed, len(GAP_CASES)
 
 
 def print_colloquial(rags: dict[str, RAG]) -> None:
