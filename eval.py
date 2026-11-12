@@ -28,9 +28,9 @@ load_dotenv()
 
 from chatbot import llm  # noqa: E402
 from chatbot.gaps import GapLog  # noqa: E402
-from chatbot.rag import RAG, SYSTEM_PROMPT, TOP_K, Answer, Intent, Mode  # noqa: E402
+from chatbot.rag import HOTLINE_NUMBER, RAG, SYSTEM_PROMPT, TOP_K, Answer, Intent, Mode  # noqa: E402
 
-HOTLINE = "2999-8888"
+HOTLINE = HOTLINE_NUMBER
 
 # (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示範圍外，檢索結果應為空。
 # 範圍外題在 RAG＋LLM 機器人會先走意圖判斷、由 LLM 婉拒並附專線，所以答案判定是「意圖為範圍外或答案附專線」（見 check_answer），不再要求「查不到」

@@ -28,7 +28,7 @@ load_dotenv()
 
 from chatbot import llm  # noqa: E402
 from chatbot.gaps import SOURCE_LINE, SOURCE_WEB, GapLog  # noqa: E402
-from chatbot.rag import RAG, format_for_line  # noqa: E402
+from chatbot.rag import HOTLINE, RAG, format_for_line  # noqa: E402
 
 BASE = Path(__file__).parent
 app = Flask(__name__)
@@ -126,7 +126,7 @@ def handle_line_event(ev: dict) -> None:
         print(f"[LINE] {ev['message']['text']!r} → {secs:.1f}s")
     except Exception as e:  # demo 時避免使用者完全沒收到回應
         print("回答失敗：", repr(e))
-        text = "系統忙碌中，請稍後再試，或撥打客服專線 (02) 2999-8888。"
+        text = f"系統忙碌中，請稍後再試，或撥打客服專線 {HOTLINE}。"
     line_post("/message/reply", {"replyToken": ev["replyToken"], "messages": [{"type": "text", "text": text[:4900]}]})
 
 
