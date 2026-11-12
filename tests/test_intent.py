@@ -202,3 +202,22 @@ def test_不再用規則判斷追問() -> None:
 def test_提示詞寫明追問改寫規則() -> None:
     assert "完整問題" in INTENT_PROMPT
     assert "原問題" in INTENT_PROMPT and "新話題" in INTENT_PROMPT
+
+
+def test_提示詞寫明關於本行的事都算查詢知識庫_拿不準選查詢知識庫() -> None:
+    kb_line = next(line for line in INTENT_PROMPT.splitlines() if "（kb）" in line)
+    for word in ("創辦人", "營業時間", "據點", "介紹"):
+        assert word in kb_line  # 銀行本身的事（不只產品）也歸查詢知識庫
+    assert "拿不準" in INTENT_PROMPT and "查詢知識庫" in INTENT_PROMPT.split("拿不準")[1][:20]
+    oos_line = next(line for line in INTENT_PROMPT.splitlines() if "（out_of_scope）" in line)
+    assert "跟本行業務無關" in oos_line
+
+
+def test_提示詞寫明查個人帳戶只限查詢自己的資料_操作問題算查詢知識庫() -> None:
+    account_line = next(line for line in INTENT_PROMPT.splitlines() if "（account）" in line)
+    assert "解鎖" in account_line and "查詢知識庫" in account_line
+
+
+def test_提示詞要求範圍外回覆一定附客服專線() -> None:
+    rule = next(line for line in INTENT_PROMPT.splitlines() if line.startswith("3. 範圍外"))
+    assert "一定" in rule and "(02) 2999-8888" in rule
