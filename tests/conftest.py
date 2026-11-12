@@ -31,6 +31,13 @@ def wait_until(condition: Callable[[], object], timeout: float = 5.0) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def no_real_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """app 被 import 時會讀 .env；清掉真的 key，避免沒注入假物件的測試偷偷呼叫 OpenAI 或 LINE。需要 key 的測試自己 setenv。"""
+    for name in ("OPENAI_API_KEY", "LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def fast_retry_poll(monkeypatch: pytest.MonkeyPatch) -> None:
     """背景重試平常每秒看一次冷卻到了沒，測試縮短，不必多等。"""
     monkeypatch.setattr(vector_index, "RETRY_POLL", 0.05)
