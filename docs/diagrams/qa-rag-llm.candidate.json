@@ -18,7 +18,7 @@
     { "id": "rrf", "type": "backend", "label": "RRF 合併排名", "sublabel": "兩邊名次加總取前 4 段", "pos": [460, 280], "size": [130, 64] },
     { "id": "llm", "type": "cloud", "label": "LLM 依段落回答", "sublabel": "新增：只看前 4 段", "pos": [460, 400], "size": [130, 64], "tag": "主要花 token" },
     { "id": "gaplog", "type": "database", "label": "知識庫缺口清單", "sublabel": "新增：本機檔案", "pos": [670, 400], "size": [130, 64], "tag": "不花 token" },
-    { "id": "reply", "type": "frontend", "label": "回覆客戶", "sublabel": "答案＋參考出處", "pos": [250, 400], "size": [130, 64] }
+    { "id": "reply", "type": "frontend", "label": "回覆客戶", "sublabel": "答案", "pos": [250, 400], "size": [130, 64] }
   ],
   "connections": [
     { "id": "ask", "from": "customer", "to": "service", "label": "問題", "variant": "emphasis" },
