@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING, Protocol
 
 import requests
 
-from embedding import text_hash
+from chatbot.indexing.embedding import text_hash
 
 if TYPE_CHECKING:
-    from rag import Chunk
+    from chatbot.rag import Chunk
 
 MODEL = "gpt-4o-mini"  # 固定寫死，不跟 LLM_MODEL；換模型時整庫重算
 COUNT = 3  # 每段幾個問法

@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import FEE_Q, KB
-from rag import RAG, Mode
+from chatbot.rag import RAG, Mode
 
 
 @pytest.mark.parametrize("mode", [Mode.FALLBACK, Mode.BM25_ONLY])

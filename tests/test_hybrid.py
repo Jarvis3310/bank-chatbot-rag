@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from conftest import FALLBACK_Q, FALLBACK_SECTION, FEE_Q, FEE_RULES, KB, FakeEmbedder
-from rag import RAG, Mode
+from chatbot.rag import RAG, Mode
 
 
 def test_混合檢索回傳的段落帶兩種分數(tmp_path: Path) -> None:

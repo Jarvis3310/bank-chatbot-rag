@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, NamedTuple
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from embedding import Embedder, text_hash
-from fallback import degrade
-from questions import (
+from chatbot.indexing.embedding import Embedder, text_hash
+from chatbot.retrieval.fallback import degrade
+from chatbot.indexing.questions import (
     QuestionEntry,
     QuestionGenerator,
     generate_questions,
@@ -29,7 +29,7 @@ from questions import (
 )
 
 if TYPE_CHECKING:
-    from rag import Chunk
+    from chatbot.rag import Chunk
 
 # 向量相似度門檻。#13 實驗（large＋同義詞＋生成問法）網格搜尋的推薦值，只用原本的題組調，驗證題組不參與
 MIN_SIMILARITY = 0.38

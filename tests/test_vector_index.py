@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from qdrant_client import QdrantClient
 
-import vector_index
+from chatbot.retrieval import vector_index
 
 from conftest import CHUNKS, FEE_Q, FEE_RULES, BreakableEmbedder, BrokenAtStartup, FakeClock, FakeEmbedder, GatedAfterStartup, wait_until
-from rag import Chunk
-from vector_index import VectorIndex
+from chatbot.rag import Chunk
+from chatbot.retrieval.vector_index import VectorIndex
 
 
 def section_of(hits: list[tuple[int, float]], chunks: list[Chunk] = CHUNKS) -> str:

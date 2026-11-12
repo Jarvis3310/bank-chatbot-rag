@@ -22,8 +22,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import llm  # noqa: E402
-from rag import RAG, SYSTEM_PROMPT, TOP_K, Answer, Mode  # noqa: E402
+from chatbot import llm  # noqa: E402
+from chatbot.rag import RAG, SYSTEM_PROMPT, TOP_K, Answer, Mode  # noqa: E402
 
 # (問題, 應該找到的章節, 答案應包含的字)；章節為 None 表示超出範圍，檢索結果應為空
 CASES = [

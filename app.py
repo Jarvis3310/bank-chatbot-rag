@@ -26,8 +26,8 @@ from flask import Flask, abort, jsonify, request, send_file
 
 load_dotenv()
 
-import llm  # noqa: E402
-from rag import RAG, format_for_line  # noqa: E402
+from chatbot import llm  # noqa: E402
+from chatbot.rag import RAG, format_for_line  # noqa: E402
 
 BASE = Path(__file__).parent
 app = Flask(__name__)

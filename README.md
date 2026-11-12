@@ -5,20 +5,21 @@
 知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 8 份文件、37 個段落。
 
 ```
-LINE / 網頁 ──► app.py ──► rag.py：混合檢索最相關的 4 段 ──► llm.py：依段落回答 ──► 回覆 + 參考資料
+LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關的 4 段 ──► chatbot/llm.py：依段落回答 ──► 回覆 + 參考資料
 ```
 
 | 檔案 | 用途 |
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
-| `rag.py` | 切段、混合檢索（向量＋BM25（含同義詞表），用 RRF 合併）、組 prompt、解析出處 |
-| `vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
-| `fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
-| `embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-large`，一律用 `OPENAI_API_KEY` |
-| `questions.py` | 建庫時替每段生成 3 個客戶可能的口語問法，跟段落一起算向量：OpenAI `gpt-4o-mini`，一律用 `OPENAI_API_KEY` |
+| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
+| `chatbot/llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
+| `chatbot/retrieval/keyword.py` | 關鍵字檢索：字元 bigram 斷詞、同義詞表、BM25；退回模式只靠它 |
+| `chatbot/retrieval/vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
+| `chatbot/retrieval/fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
+| `chatbot/indexing/embedding.py` | 把文字轉成向量：OpenAI `text-embedding-3-large`，一律用 `OPENAI_API_KEY` |
+| `chatbot/indexing/questions.py` | 建庫時替每段生成 3 個客戶可能的口語問法，跟段落一起算向量：OpenAI `gpt-4o-mini`，一律用 `OPENAI_API_KEY` |
 | `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，換 embedding 或生成問法的模型時自動整庫重算，不進版控 |
-| `llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
 | `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）與 20 題驗證題組（沒拿來調門檻，只回報）只測檢索；`--answer` 時另跑 14 題簡報題組 |
 | `tests/` | 單元測試（用假 embedding，不呼叫 API），共用設定在 `tests/conftest.py`；安裝與執行見下方「跑測試」 |
@@ -49,6 +50,23 @@ python app.py
 生成的問法存在 `kb/questions.json`（進版控），每段記錄段落指紋、生成模型和問法。建庫時段落和生成模型都相符就直接用檔案裡的問法、不呼叫 LLM，所以刪掉 `vector_store/` 重建的結果每次都一樣（LLM 每次生成的問法不完全相同，會影響檢索排名）。改了知識庫後重建（重啟服務或跑 `eval.py`），改過或新增的段落會自動補生成並寫回這個檔案，**記得把 `kb/questions.json` 跟知識庫一起 commit**。生成失敗的段落不會寫進檔案，之後重試成功才補上。段落被刪除或改名後，重建時會把檔案裡已不存在的段落一併移除。
 
 > 服務（`python app.py`）跑著時不能同時跑 `eval.py`：Qdrant 本機模式會鎖住 `vector_store/` 資料夾，請先停掉服務再跑評測。
+
+### 改用 Docker 跑
+
+公司電腦的應用程式控制原則若封鎖 Python 套件的 DLL（例如 `import qdrant_client` 時出現「應用程式控制原則已封鎖此檔案」），改用 Docker 跑。需要 Docker Desktop，`.env` 照上面的步驟準備好：
+
+```powershell
+docker build -t bank-chatbot .
+docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/app/kb" -v "${PWD}/vector_store:/app/vector_store" bank-chatbot
+```
+
+| 掛載 | 原因 |
+|---|---|
+| `.env`（唯讀） | API key 不打包進 image；由程式自己讀 `.env`，寫法跟本機相同 |
+| `kb/` | 改知識庫只要重啟容器，不必重新 build；補生成的問法會寫回本機的 `kb/questions.json` |
+| `vector_store/` | 重啟容器不必重建向量庫 |
+
+按 Ctrl+C 停止。跑評測時先停掉服務，再把最後的 `bank-chatbot` 改成 `bank-chatbot python eval.py`（`-p 8000:8000` 可省略）。
 
 ### 跑測試
 
