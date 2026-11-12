@@ -140,3 +140,11 @@ def test_指定不存在的機器人回400(tmp_path: Path, monkeypatch: pytest.M
     r = app.app.test_client().post("/api/chat", json={"message": "你好", "bot": "nope"})
 
     assert r.status_code == 400
+
+
+def test_首頁同一題分別問純RAG與RAG加LLM兩個機器人() -> None:
+    html = app.app.test_client().get("/").get_data(as_text=True)
+
+    assert '"rag"' in html and '"rag_llm"' in html  # 兩欄各用 bot 參數呼叫 /api/chat
+    assert "純 RAG" in html and "RAG＋LLM" in html
+    assert "intent" not in html and "意圖" not in html  # 網頁不顯示意圖和改寫後的問題
