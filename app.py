@@ -68,12 +68,12 @@ gap_log = GapLog.from_env()
 
 def ask(session: str, question: str, bot: str = BOT_RAG_LLM, source: str = SOURCE_WEB):
     t0 = time.time()
+    if question.strip() in {"重來", "清除", "reset"}:  # 兩個機器人都吃：清掉 RAG＋LLM 的紀錄（純 RAG 本來就不記）
+        histories[(BOT_RAG_LLM, session)].clear()
+        return None, 0.0
     if bot == BOT_RAG:  # 純 RAG：不記對話、不處理追問、不用 LLM
         return get_rag().answer_rag_only(question), time.time() - t0
     key = (bot, session)
-    if question.strip() in {"重來", "清除", "reset"}:
-        histories[key].clear()
-        return None, 0.0
     ans = get_rag().answer(question, list(histories[key]))
     if ans.gap:  # 知識庫缺口：記下來交給後台補資料
         gap_log.record(source, session, question, ans.rewritten_question)

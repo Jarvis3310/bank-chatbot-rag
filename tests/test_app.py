@@ -159,3 +159,15 @@ def test_首頁同一題分別問純RAG與RAG加LLM兩個機器人() -> None:
     assert '"rag"' in html and '"rag_llm"' in html  # 兩欄各用 bot 參數呼叫 /api/chat
     assert "純 RAG" in html and "RAG＋LLM" in html
     assert "intent" not in html and "意圖" not in html  # 網頁不顯示意圖和改寫後的問題
+
+
+@pytest.mark.parametrize("word", ["重來", "清除", "reset"])
+def test_純RAG機器人收到重來也回已清除而不檢索(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, word: str) -> None:
+    rag = _use_rag(monkeypatch, tmp_path)
+    queries: list[str] = []
+    monkeypatch.setattr(rag, "retrieve", lambda q: queries.append(q) or [])
+
+    body = _chat("rag", word)
+
+    assert "已清除對話紀錄" in body["answer"]
+    assert body["sources"] == [] and queries == []
