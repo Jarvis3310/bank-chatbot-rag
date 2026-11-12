@@ -5,3 +5,6 @@ __pycache__/
 vector_store/
 .archify/
 gaps/
+
+# archify 交付收據
+docs/diagrams/*.delivery.json
