@@ -16,7 +16,7 @@ def test_送給LLM的是檢索到的段落且回答列出參考資料() -> None:
 
     ans = rag.answer(FALLBACK_Q)
 
-    sent = chat.calls[0][1][-1]["content"]
+    sent = chat.calls[-1][1][-1]["content"]  # 第 2 次呼叫（第 1 次是意圖判斷）
     hits = rag.retrieve(FALLBACK_Q)
     assert 0 < len(hits) <= 4
     assert all(h.chunk.text in sent for h in hits)
@@ -44,7 +44,7 @@ def test_LLM_PROVIDER設成none也照樣用LLM回答(monkeypatch: pytest.MonkeyP
 
     ans = make_rag(chat).answer(FALLBACK_Q)
 
-    assert len(chat.calls) == 1
+    assert len(chat.calls) == 2  # 意圖判斷＋依段落回答
     assert ans.text == "可以開外幣帳戶"
 
 

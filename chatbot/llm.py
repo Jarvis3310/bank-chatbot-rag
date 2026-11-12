@@ -23,14 +23,17 @@ def enabled() -> bool:
     return bool(os.getenv("OPENAI_API_KEY"))
 
 
-def chat(system: str, messages: list[dict]) -> str:
+def chat(system: str, messages: list[dict], json_mode: bool = False) -> str:
     key = os.getenv("OPENAI_API_KEY")
     if not key:
         raise RuntimeError("尚未設定 OPENAI_API_KEY")
+    body = {"model": MODEL, "messages": [{"role": "system", "content": system}, *messages], "temperature": TEMPERATURE}
+    if json_mode:  # 要求回傳合法 JSON（意圖判斷用）
+        body["response_format"] = {"type": "json_object"}
     r = requests.post(
         URL,
         headers={"Authorization": f"Bearer {key}"},
-        json={"model": MODEL, "messages": [{"role": "system", "content": system}, *messages], "temperature": TEMPERATURE},
+        json=body,
         timeout=TIMEOUT,
     )
     if r.status_code >= 400:

@@ -140,10 +140,14 @@ class GatedAfterStartup(BrokenAtStartup):
 
 
 class FakeChat:
-    """假 LLM：記下送出的 system 與 messages，回固定文字。broken 設成 True 就報錯。"""
+    """假 LLM：記下送出的 system 與 messages。
 
-    def __init__(self, reply: str = "可以開外幣帳戶【1】"):
+    平常每次都回 reply；給 replies 就依序回（字串照回、例外就丟出），用完後回 reply。broken 設成 True 一律報錯。
+    """
+
+    def __init__(self, reply: str = "可以開外幣帳戶【1】", replies: list[str | Exception] | None = None):
         self.reply = reply
+        self.replies = list(replies or [])
         self.broken = False
         self.calls: list[tuple[str, list[dict]]] = []
 
@@ -151,4 +155,9 @@ class FakeChat:
         self.calls.append((system, messages))
         if self.broken:
             raise RuntimeError("LLM API 錯誤 429")
+        if self.replies:
+            nxt = self.replies.pop(0)
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
         return self.reply
