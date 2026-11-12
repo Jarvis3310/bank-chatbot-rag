@@ -1,6 +1,6 @@
 """Embedding 產生器：把文字轉成向量。RAG 只依賴 embed() 這個介面，測試可以換成假的。
 
-正式使用 OpenAI text-embedding-3-large，一律用 OPENAI_API_KEY（跟 LLM_PROVIDER 無關）。
+正式使用 OpenAI text-embedding-3-large，一律用 OPENAI_API_KEY。
 比照 llm.py 直接呼叫 REST API，公司網路設定 HTTPS_PROXY 即可。
 """
 from __future__ import annotations

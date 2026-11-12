@@ -5,12 +5,11 @@ import pytest
 from qdrant_client import QdrantClient
 
 import app
-from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder
+from conftest import FALLBACK_Q, FALLBACK_SECTION, KB, BreakableEmbedder, FakeChat
 from chatbot.rag import RAG
 
 
 def test_embedding失敗時網頁聊天API仍回200和答案(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "none")
     embedder = BreakableEmbedder()
     monkeypatch.setattr(app, "rag", RAG(KB, embedder=embedder, vector_dir=tmp_path))
     embedder.broken = "error"
@@ -44,9 +43,9 @@ def test_沒用過RAG時結束不會建立RAG(monkeypatch: pytest.MonkeyPatch) -
 NO_LLM_NOTE = "尚未設定 LLM"
 
 
-def _use_rag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> RAG:
+def _use_rag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, chat: FakeChat | None = None) -> RAG:
     embedder = BreakableEmbedder()
-    rag = RAG(KB, embedder=embedder, vector_dir=tmp_path)
+    rag = RAG(KB, embedder=embedder, vector_dir=tmp_path, chat=chat or FakeChat())
     embedder.broken = "error"  # 走 BM25＋同義詞的退回模式，FALLBACK_Q 才一定找得到段落
     monkeypatch.setattr(app, "rag", rag)
     app.histories.clear()
@@ -74,7 +73,7 @@ def test_純RAG機器人連問追問時只用當題檢索(tmp_path: Path, monkey
     assert queries == ["信用卡不見了", "那手續費呢？"]
 
 
-@pytest.mark.parametrize("provider", ["none", "openai", "anthropic"])
+@pytest.mark.parametrize("provider", ["none", "openai"])
 def test_純RAG機器人的回覆沒有尚未設定LLM字樣(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
     _use_rag(monkeypatch, tmp_path)
     monkeypatch.setenv("LLM_PROVIDER", provider)
@@ -86,19 +85,20 @@ def test_純RAG機器人的回覆沒有尚未設定LLM字樣(tmp_path: Path, mon
     assert FALLBACK_SECTION in body["sources"][0]
 
 
-def test_RAG加LLM機器人沿用現有行為(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _use_rag(monkeypatch, tmp_path)
-    monkeypatch.setenv("LLM_PROVIDER", "none")
+def test_RAG加LLM機器人的回答由LLM生成(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_rag(monkeypatch, tmp_path, FakeChat("可以開外幣帳戶【1】"))
+    monkeypatch.setenv("LLM_PROVIDER", "none")  # 不影響這個機器人
 
     explicit = _chat("rag_llm", FALLBACK_Q)
     default = _chat(None, FALLBACK_Q)  # 沒指定 bot 時是 RAG＋LLM 機器人
 
-    assert NO_LLM_NOTE in explicit["answer"] and NO_LLM_NOTE in default["answer"]
+    for body in (explicit, default):
+        assert body["answer"] == "可以開外幣帳戶"
+        assert FALLBACK_SECTION in body["sources"][0]
 
 
 def test_兩個機器人回傳相同欄位(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _use_rag(monkeypatch, tmp_path)
-    monkeypatch.setenv("LLM_PROVIDER", "none")
 
     a, b = _chat("rag", FALLBACK_Q), _chat("rag_llm", FALLBACK_Q)
 
@@ -111,7 +111,6 @@ def test_兩個機器人回傳相同欄位(tmp_path: Path, monkeypatch: pytest.M
 
 def test_兩個機器人共用同一個RAG與向量庫連線(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rag = _use_rag(monkeypatch, tmp_path)
-    monkeypatch.setenv("LLM_PROVIDER", "none")
 
     _chat("rag", FALLBACK_Q)
     _chat("rag_llm", FALLBACK_Q)
@@ -121,7 +120,6 @@ def test_兩個機器人共用同一個RAG與向量庫連線(tmp_path: Path, mon
 
 def test_兩個機器人的對話紀錄分開(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     rag = _use_rag(monkeypatch, tmp_path)
-    monkeypatch.setenv("LLM_PROVIDER", "none")
     queries: list[str] = []
     real = rag.retrieve
     monkeypatch.setattr(rag, "retrieve", lambda q: (queries.append(q), real(q))[1])
@@ -140,3 +138,16 @@ def test_指定不存在的機器人回400(tmp_path: Path, monkeypatch: pytest.M
     r = app.app.test_client().post("/api/chat", json={"message": "你好", "bot": "nope"})
 
     assert r.status_code == 400
+
+
+def test_LLM失敗時RAG加LLM機器人回錯誤訊息_純RAG照常_不記進對話(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = FakeChat()
+    chat.broken = True
+    _use_rag(monkeypatch, tmp_path, chat)
+
+    llm_body = _chat("rag_llm", FALLBACK_Q)
+    rag_body = _chat("rag", FALLBACK_Q)
+
+    assert "(02) 2999-8888" in llm_body["answer"] and llm_body["sources"] == []
+    assert FALLBACK_SECTION in rag_body["sources"][0]
+    assert len(app.histories[("rag_llm", "t")]) == 0

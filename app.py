@@ -70,7 +70,8 @@ def ask(session: str, question: str, bot: str = BOT_RAG_LLM):
         histories[key].clear()
         return None, 0.0
     ans = get_rag().answer(question, list(histories[key]))
-    histories[key].append((question, ans.text))
+    if not ans.error:  # LLM 失敗的錯誤訊息不算一輪對話
+        histories[key].append((question, ans.text))
     return ans, time.time() - t0
 
 

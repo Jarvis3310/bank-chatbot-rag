@@ -137,3 +137,18 @@ class GatedAfterStartup(BrokenAtStartup):
             self.waiting.set()
             self.gate.wait(10)
         return super().embed(texts)
+
+
+class FakeChat:
+    """假 LLM：記下送出的 system 與 messages，回固定文字。broken 設成 True 就報錯。"""
+
+    def __init__(self, reply: str = "可以開外幣帳戶【1】"):
+        self.reply = reply
+        self.broken = False
+        self.calls: list[tuple[str, list[dict]]] = []
+
+    def __call__(self, system: str, messages: list[dict]) -> str:
+        self.calls.append((system, messages))
+        if self.broken:
+            raise RuntimeError("LLM API 錯誤 429")
+        return self.reply
