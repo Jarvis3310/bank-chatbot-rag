@@ -38,16 +38,6 @@ def test_聊到第4輪時只送最近3輪對話() -> None:
     assert [m["content"] for m in messages[:-1]] == ["問題2", "回答2", "問題3", "回答3", "問題4", "回答4"]
 
 
-def test_LLM_PROVIDER設成none也照樣用LLM回答(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "none")
-    chat = FakeChat()
-
-    ans = make_rag(chat).answer(FALLBACK_Q)
-
-    assert len(chat.calls) == 2  # 意圖判斷＋依段落回答
-    assert ans.text == "可以開外幣帳戶"
-
-
 def test_沒有OPENAI_API_KEY時回錯誤訊息而不是丟例外(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     rag = RAG(KB, mode=Mode.FALLBACK)  # 沒注入假 LLM，走真正的 llm.chat

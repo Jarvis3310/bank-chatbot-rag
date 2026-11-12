@@ -73,10 +73,8 @@ def test_純RAG機器人連問追問時只用當題檢索(tmp_path: Path, monkey
     assert queries == ["信用卡不見了", "那手續費呢？"]
 
 
-@pytest.mark.parametrize("provider", ["none", "openai"])
-def test_純RAG機器人的回覆沒有尚未設定LLM字樣(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
+def test_純RAG機器人的回覆沒有尚未設定LLM字樣(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _use_rag(monkeypatch, tmp_path)
-    monkeypatch.setenv("LLM_PROVIDER", provider)
 
     body = _chat("rag", FALLBACK_Q)
 
@@ -87,7 +85,6 @@ def test_純RAG機器人的回覆沒有尚未設定LLM字樣(tmp_path: Path, mon
 
 def test_RAG加LLM機器人的回答由LLM生成(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _use_rag(monkeypatch, tmp_path, FakeChat("可以開外幣帳戶【1】"))
-    monkeypatch.setenv("LLM_PROVIDER", "none")  # 不影響這個機器人
 
     explicit = _chat("rag_llm", FALLBACK_Q)
     default = _chat(None, FALLBACK_Q)  # 沒指定 bot 時是 RAG＋LLM 機器人
