@@ -76,3 +76,32 @@ def test_純RAG機器人不呼叫LLM() -> None:
 
     assert chat.calls == []
     assert FALLBACK_SECTION in ans.sources[0].section
+
+
+def test_意圖與第2次呼叫都要求JSON輸出(monkeypatch: pytest.MonkeyPatch) -> None:
+    """沒注入假 LLM 時走真正的 llm.chat；攔 requests.post，確認兩次呼叫都帶 response_format。"""
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    bodies = []
+
+    class Resp:
+        status_code = 200
+
+        def __init__(self, content: str):
+            self.content = content
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": self.content}}]}
+
+    replies = ['{"intent": "kb", "reply": "", "rewritten_question": "我想存日幣"}', '{"answer": "可以【1】", "gap": false}']
+
+    def fake_post(url, headers, json, timeout):
+        bodies.append(json)
+        return Resp(replies[len(bodies) - 1])
+
+    monkeypatch.setattr(llm.requests, "post", fake_post)
+
+    ans = RAG(KB, mode=Mode.FALLBACK).answer(FALLBACK_Q)
+
+    assert len(bodies) == 2
+    assert [b.get("response_format") for b in bodies] == [{"type": "json_object"}] * 2
+    assert ans.text == "可以" and not ans.error and not ans.intent_failed
