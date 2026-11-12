@@ -44,7 +44,7 @@ def test_LINE訊息由RAG加LLM機器人回答(line) -> None:
 
     app.handle_line_event(_event("U1", FALLBACK_Q))
 
-    assert len(chat.calls) == 1  # 走了 LLM
+    assert len(chat.calls) == 2  # 走了 LLM：意圖判斷＋依段落回答
     assert "可以開外幣帳戶" in _replies(sent)[0]
     assert (app.BOT_RAG_LLM, "U1") in app.histories
     assert (app.BOT_RAG, "U1") not in app.histories
