@@ -171,3 +171,19 @@ def test_純RAG機器人收到重來也回已清除而不檢索(tmp_path: Path, 
 
     assert "已清除對話紀錄" in body["answer"]
     assert body["sources"] == [] and queries == []
+
+
+def test_純RAG機器人的provider是none不顯示openai(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_rag(monkeypatch, tmp_path)
+
+    assert _chat("rag", FALLBACK_Q)["provider"] == "none"
+    assert _chat("rag_llm", FALLBACK_Q)["provider"] == "openai"
+
+
+def test_health在沒有OPENAI_API_KEY時llm欄位是none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_rag(monkeypatch, tmp_path)
+    client = app.app.test_client()
+
+    assert client.get("/health").get_json()["llm"] == "none"  # conftest 已清掉 key
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    assert client.get("/health").get_json()["llm"] == "openai"

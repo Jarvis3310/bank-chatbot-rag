@@ -15,10 +15,6 @@ TIMEOUT = 40
 TEMPERATURE = 0.2
 
 
-def provider() -> str:
-    return "openai"
-
-
 def enabled() -> bool:
     return bool(os.getenv("OPENAI_API_KEY"))
 

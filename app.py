@@ -59,6 +59,13 @@ BOT_RAG_LLM = "rag_llm"  # RAG＋LLM 機器人（預設；LINE 也接這個）
 BOTS = (BOT_RAG, BOT_RAG_LLM)
 
 # RAG＋LLM 機器人每位使用者保留最近 3 輪對話，讓追問接得上（重啟後清空）。key 是 (機器人, 使用者)
+NO_LLM = "none"  # 顯示用：這個機器人／這個服務沒有在用 LLM
+
+
+def llm_label() -> str:
+    return "openai" if llm.enabled() else NO_LLM
+
+
 histories: dict[tuple[str, str], deque] = defaultdict(lambda: deque(maxlen=3))
 
 
@@ -151,7 +158,7 @@ def api_chat():
         sources=[c.label for c in ans.sources],
         retrieved=[h.to_dict() for h in ans.retrieved],
         seconds=round(secs, 2),
-        provider=llm.provider(),
+        provider="openai" if bot == BOT_RAG_LLM else NO_LLM,
     )
 
 
@@ -162,11 +169,11 @@ def index():
 
 @app.get("/health")
 def health():
-    return jsonify(chunks=len(get_rag().chunks), llm=llm.provider(), line=line_ready())
+    return jsonify(chunks=len(get_rag().chunks), llm=llm_label(), line=line_ready())
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
-    print(f"知識庫段落數：{len(get_rag().chunks)}　LLM：{llm.provider()}　LINE：{'已設定' if line_ready() else '未設定'}")
+    print(f"知識庫段落數：{len(get_rag().chunks)}　LLM：{llm_label()}　LINE：{'已設定' if line_ready() else '未設定'}")
     print(f"網頁聊天：http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, threaded=True)

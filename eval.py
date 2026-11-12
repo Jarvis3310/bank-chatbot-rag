@@ -326,7 +326,7 @@ def run(rags: dict[str, RAG], with_answer: bool, gap_log: GapLog | None = None) 
     for name, s in scores.items():
         print(f"【{name}】檢索第一名正確：{s.hit1}/{s.n_in}　前 {TOP_K} 名有找到：{s.hitk}/{s.n_in}　範圍外撞到段落：{s.out_hits}/{s.n_out}")
     if with_answer:
-        print(f"\n答案含關鍵字（{ANSWER_COLUMN}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.provider()}）")
+        print(f"\n答案含關鍵字（{ANSWER_COLUMN}）：{ans_ok}/{len(CASES)}　平均回應：{sum(times) / len(times):.1f} 秒（{llm.MODEL}）")
 
     print_colloquial(rags)
     print_holdout(rags)
