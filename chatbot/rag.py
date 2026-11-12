@@ -101,7 +101,7 @@ INTENT_LABELS = {
 }
 
 # 意圖判斷的提示詞（第 1 次 LLM 呼叫）。輸出的 JSON 欄位：intent、reply、rewritten_question。
-# #24 追問改寫：rewritten_question 目前原樣填原問題，改寫規則加在這裡、檢索改用它；#26 知識庫缺口在第 2 次呼叫（讀完段落）判斷，不在這裡。
+# 追問改寫規則在 rewritten_question 那段，檢索用它；#26 知識庫缺口在第 2 次呼叫（讀完段落）判斷，不在這裡。
 INTENT_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。先判斷客戶最新一句話的意圖，只輸出一個 JSON 物件，不要其他文字。
 
 意圖（intent 欄位只能填括號裡的代碼）共 5 類：
@@ -113,7 +113,11 @@ INTENT_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。先判�
 
 輸出格式：{"intent": "代碼", "reply": "回覆文字", "rewritten_question": "問題"}
 ・intent 不是 kb 時，reply 就是你直接給客戶的回覆；intent 是 kb 時 reply 填空字串。
-・rewritten_question：目前原樣填入客戶最新一句話。
+・rewritten_question（追問改寫）：把客戶最新一句話改寫成單獨看也懂的完整問題，供檢索使用。
+  - 最新一句話需要前文才看得懂（例如「他生日是哪天」「補發要多少錢」「那手續費呢」），就依前面的對話補上主詞與主題，改寫成完整問題，例如「創辦人阿兩的生日是哪天」。
+  - 最新一句話本身已完整、或是跟前文無關的新話題（例如前面聊信用卡，現在問「房貸最多可以貸幾成」），改寫結果就是原問題，一字不改；不要把前一題的主題帶進來。
+  - 沒有前文時，一律填原問題。
+  - 只改寫、不回答；不要加入對話中沒出現過的資訊。
 
 回覆規則（只適用於 reply）：
 1. 繁體中文，口吻親切、簡潔，適合在 LINE 閱讀，不要用 Markdown，100 字內。
@@ -127,15 +131,6 @@ INTENT_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。先判�
 
 LLM_ERROR_TEXT = "目前無法產生回覆，請稍後再試，或撥打 24 小時客服專線 (02) 2999-8888。"
 NOT_FOUND_TEXT = "這個問題我目前查不到相關資料，建議撥打 24 小時客服專線 (02) 2999-8888。"
-
-FOLLOWUP_START = ("那", "還有", "然後", "另外", "所以", "那如果", "如果是")
-FOLLOWUP_END = ("呢", "呢？", "呢?")
-
-
-def is_followup(question: str) -> bool:
-    """「那手續費呢？」「還有其他方式嗎」這類接續上一題的短問句。"""
-    q = question.strip()
-    return q.startswith(FOLLOWUP_START) or q.endswith(FOLLOWUP_END)
 
 
 def parse_intent(raw: str) -> tuple[Intent, str, str] | None:
@@ -179,7 +174,7 @@ class Answer:
     retrieved: list[Hit]
     error: bool = False  # LLM 沒設定或呼叫失敗：text 是錯誤訊息，不算一輪對話
     intent: Intent | None = None  # RAG＋LLM 機器人判斷的意圖；純 RAG 機器人與 LLM 失敗時是 None
-    rewritten_question: str = ""  # 預留給追問改寫（#24）：意圖呼叫回傳的 rewritten_question
+    rewritten_question: str = ""  # 追問改寫後的問題（意圖呼叫回傳的 rewritten_question），檢索用它
 
 
 class Mode(Enum):
@@ -290,9 +285,7 @@ class RAG:
         print(f"意圖：{intent.label}｜問題：{question}｜改寫：{rewritten}")
         if intent is not Intent.KNOWLEDGE_BASE:
             return Answer(reply, [], [], intent=intent, rewritten_question=rewritten)
-        # 只有追問才連同上一題一起檢索，否則新問題會被上一題的主題帶偏（#24 改成用 rewritten）
-        query = f"{history[-1][0]} {question}" if history and is_followup(question) else question
-        hits = self.retrieve(query)
+        hits = self.retrieve(rewritten)  # 追問改寫後的問題；新話題時 rewritten 就是原問題
 
         context = "\n\n".join(f"【{i}】{h.chunk.label}\n{h.chunk.text}" for i, h in enumerate(hits, 1)) or "（沒有找到相關資料）"
         messages = []
