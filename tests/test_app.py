@@ -38,3 +38,105 @@ def test_沒用過RAG時結束不會建立RAG(monkeypatch: pytest.MonkeyPatch) -
     app.close_rag()
 
     assert app.rag is None
+
+
+# ---------- 純 RAG 機器人與 RAG＋LLM 機器人 ----------
+NO_LLM_NOTE = "尚未設定 LLM"
+
+
+def _use_rag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> RAG:
+    embedder = BreakableEmbedder()
+    rag = RAG(KB, embedder=embedder, vector_dir=tmp_path)
+    embedder.broken = "error"  # 走 BM25＋同義詞的退回模式，FALLBACK_Q 才一定找得到段落
+    monkeypatch.setattr(app, "rag", rag)
+    app.histories.clear()
+    return rag
+
+
+def _chat(bot: str | None, message: str, session: str = "t") -> dict:
+    payload = {"session_id": session, "message": message}
+    if bot is not None:
+        payload["bot"] = bot
+    r = app.app.test_client().post("/api/chat", json=payload)
+    assert r.status_code == 200
+    return r.get_json()
+
+
+def test_純RAG機器人連問追問時只用當題檢索(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rag = _use_rag(monkeypatch, tmp_path)
+    queries: list[str] = []
+    real = rag.retrieve
+    monkeypatch.setattr(rag, "retrieve", lambda q: (queries.append(q), real(q))[1])
+
+    _chat("rag", "信用卡不見了")
+    _chat("rag", "那手續費呢？")
+
+    assert queries == ["信用卡不見了", "那手續費呢？"]
+
+
+@pytest.mark.parametrize("provider", ["none", "openai", "anthropic"])
+def test_純RAG機器人的回覆沒有尚未設定LLM字樣(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
+    _use_rag(monkeypatch, tmp_path)
+    monkeypatch.setenv("LLM_PROVIDER", provider)
+
+    body = _chat("rag", FALLBACK_Q)
+
+    assert NO_LLM_NOTE not in body["answer"]
+    assert body["answer"]
+    assert FALLBACK_SECTION in body["sources"][0]
+
+
+def test_RAG加LLM機器人沿用現有行為(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_rag(monkeypatch, tmp_path)
+    monkeypatch.setenv("LLM_PROVIDER", "none")
+
+    explicit = _chat("rag_llm", FALLBACK_Q)
+    default = _chat(None, FALLBACK_Q)  # 沒指定 bot 時是 RAG＋LLM 機器人
+
+    assert NO_LLM_NOTE in explicit["answer"] and NO_LLM_NOTE in default["answer"]
+
+
+def test_兩個機器人回傳相同欄位(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_rag(monkeypatch, tmp_path)
+    monkeypatch.setenv("LLM_PROVIDER", "none")
+
+    a, b = _chat("rag", FALLBACK_Q), _chat("rag_llm", FALLBACK_Q)
+
+    for body in (a, b):
+        assert set(body) >= {"answer", "sources", "retrieved", "seconds", "provider"}
+        assert FALLBACK_SECTION in body["retrieved"][0]["label"]
+        assert isinstance(body["seconds"], (int, float))
+    assert a["retrieved"] == b["retrieved"]
+
+
+def test_兩個機器人共用同一個RAG與向量庫連線(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rag = _use_rag(monkeypatch, tmp_path)
+    monkeypatch.setenv("LLM_PROVIDER", "none")
+
+    _chat("rag", FALLBACK_Q)
+    _chat("rag_llm", FALLBACK_Q)
+
+    assert app.get_rag() is rag  # 沒有因為換機器人另開一個 RAG（Qdrant 本機模式只能開一次）
+
+
+def test_兩個機器人的對話紀錄分開(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    rag = _use_rag(monkeypatch, tmp_path)
+    monkeypatch.setenv("LLM_PROVIDER", "none")
+    queries: list[str] = []
+    real = rag.retrieve
+    monkeypatch.setattr(rag, "retrieve", lambda q: (queries.append(q), real(q))[1])
+
+    _chat("rag", "信用卡不見了")  # 純 RAG 不記對話，也不影響 RAG＋LLM 的紀錄
+    _chat("rag_llm", "那手續費呢？")
+
+    assert queries == ["信用卡不見了", "那手續費呢？"]
+    assert len(app.histories[("rag_llm", "t")]) == 1
+    assert ("rag", "t") not in app.histories or len(app.histories[("rag", "t")]) == 0
+
+
+def test_指定不存在的機器人回400(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_rag(monkeypatch, tmp_path)
+
+    r = app.app.test_client().post("/api/chat", json={"message": "你好", "bot": "nope"})
+
+    assert r.status_code == 400

@@ -2,7 +2,7 @@
 
 - POST /callback  ：LINE webhook
 - GET  /          ：網頁聊天（LINE 出狀況時的備案，也方便展示檢索過程）
-- POST /api/chat  ：網頁聊天用的 API
+- POST /api/chat  ：網頁聊天用的 API；body 的 bot 指定 "rag"（純 RAG）或 "rag_llm"（預設）
 - GET  /health    ：檢查設定
 
 啟動：python app.py   （預設 http://localhost:8000）
@@ -52,17 +52,25 @@ def close_rag() -> None:
         if rag is not None:
             rag.close()
 
-# 每位使用者保留最近 3 輪對話，讓追問接得上（重啟後清空）
-histories: dict[str, deque] = defaultdict(lambda: deque(maxlen=3))
+# 兩個機器人：共用同一個 RAG（同一個向量庫連線），對話紀錄各記各的
+BOT_RAG = "rag"  # 純 RAG 機器人
+BOT_RAG_LLM = "rag_llm"  # RAG＋LLM 機器人（預設；LINE 也接這個）
+BOTS = (BOT_RAG, BOT_RAG_LLM)
+
+# RAG＋LLM 機器人每位使用者保留最近 3 輪對話，讓追問接得上（重啟後清空）。key 是 (機器人, 使用者)
+histories: dict[tuple[str, str], deque] = defaultdict(lambda: deque(maxlen=3))
 
 
-def ask(session: str, question: str):
+def ask(session: str, question: str, bot: str = BOT_RAG_LLM):
     t0 = time.time()
+    if bot == BOT_RAG:  # 純 RAG：不記對話、不處理追問、不用 LLM
+        return get_rag().answer_rag_only(question), time.time() - t0
+    key = (bot, session)
     if question.strip() in {"重來", "清除", "reset"}:
-        histories[session].clear()
+        histories[key].clear()
         return None, 0.0
-    ans = get_rag().answer(question, list(histories[session]))
-    histories[session].append((question, ans.text))
+    ans = get_rag().answer(question, list(histories[key]))
+    histories[key].append((question, ans.text))
     return ans, time.time() - t0
 
 
@@ -124,7 +132,10 @@ def callback():
 @app.post("/api/chat")
 def api_chat():
     data = request.get_json(force=True)
-    ans, secs = ask(data.get("session_id", "web"), data.get("message", ""))
+    bot = data.get("bot", BOT_RAG_LLM)
+    if bot not in BOTS:
+        return jsonify(error=f"bot 只能是 {' 或 '.join(BOTS)}"), 400
+    ans, secs = ask(data.get("session_id", "web"), data.get("message", ""), bot)
     if ans is None:
         return jsonify(answer="已清除對話紀錄。", sources=[], retrieved=[], seconds=0)
     return jsonify(

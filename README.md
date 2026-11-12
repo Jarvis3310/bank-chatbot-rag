@@ -41,6 +41,8 @@ python app.py
 
 打開 http://localhost:8000 就是網頁聊天。這時 `.env` 的 `LLM_PROVIDER=none`，系統會直接回最相關的段落，可以先確認檢索正常。
 
+服務有兩個機器人，共用同一份檢索與向量庫。`POST /api/chat` 用 `bot` 指定：`"rag"` 是純 RAG 機器人（只用當題檢索，回第 1 名段落原文，不記對話、不用 LLM，跟 `LLM_PROVIDER` 無關）；`"rag_llm"` 是 RAG＋LLM 機器人（預設，記最近 3 輪對話，LINE 也接這個）。兩個機器人的對話紀錄分開。
+
 檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`（跟 `LLM_PROVIDER` 選哪家無關）。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
 
 建庫時還會額外呼叫 OpenAI `gpt-4o-mini`，替每段寫 3 個客戶可能的口語問法，跟段落一起算向量，讓口語問題比較容易對到正確段落（同樣用 `OPENAI_API_KEY`，跟 `LLM_PROVIDER` 無關）。從零生成（目前 37 段）每段呼叫一次，約 10 秒、生成問法約 0.002 美元（加上 embedding 約 0.003 美元）。生成失敗（沒額度、逾時、斷線）時，該段先只用段落算向量，服務照常，冷卻 60 秒後再重試。
