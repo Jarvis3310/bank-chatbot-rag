@@ -1,6 +1,6 @@
 """RAG＋LLM 機器人：先判斷意圖，只有「查詢知識庫」才檢索。LLM 換成假的，不呼叫 API。
 
-第 1 次 LLM 呼叫回結構化結果（intent、reply、rewritten_question）；查詢知識庫才有第 2 次（依段落回答）。
+意圖呼叫回結構化結果（intent、reply）；查詢知識庫才再有一次呼叫（依段落回答）。追問改寫見 test_rewrite.py。
 """
 import json
 
@@ -10,8 +10,12 @@ from conftest import FALLBACK_Q, KB, FakeChat
 from chatbot.rag import INTENT_PROMPT, Intent, RAG, Mode
 
 
-def intent_json(intent: str, reply: str = "", rewritten: str = "") -> str:
-    return json.dumps({"intent": intent, "reply": reply, "rewritten_question": rewritten}, ensure_ascii=False)
+def intent_json(intent: str, reply: str = "", rewritten: str = "") -> str:  # rewritten 已不使用，留著讓舊呼叫不用改
+    return json.dumps({"intent": intent, "reply": reply}, ensure_ascii=False)
+
+
+def rewrite_json(rewritten: str) -> str:
+    return json.dumps({"rewritten_question": rewritten}, ensure_ascii=False)
 
 
 def make_rag(chat: FakeChat) -> RAG:
@@ -44,7 +48,6 @@ def test_意圖提示詞寫明5類專線與服務時間() -> None:
         assert name in INTENT_PROMPT
     assert "(02) 2999-8888" in INTENT_PROMPT
     assert "24 小時" in INTENT_PROMPT
-    assert "rewritten_question" in INTENT_PROMPT  # 預留給追問改寫
 
 
 def test_信用卡不見了怎麼辦判成查詢知識庫並檢索() -> None:
@@ -122,18 +125,6 @@ def test_意圖與改寫欄位印在服務log(capsys: pytest.CaptureFixture[str]
     assert "意圖" in out and "打招呼" in out
 
 
-def test_意圖呼叫帶最近3輪對話供追問改寫使用() -> None:
-    chat = FakeChat(replies=[intent_json("greeting", "您好")])
-    history = [(f"問題{n}", f"回答{n}") for n in range(1, 5)]
-
-    make_rag(chat).answer("你好", history)
-
-    system, messages = chat.calls[0]
-    assert system == INTENT_PROMPT
-    assert [m["content"] for m in messages[:-1]] == ["問題2", "回答2", "問題3", "回答3", "問題4", "回答4"]
-    assert "你好" in messages[-1]["content"]
-
-
 # ---- #24 追問改寫：檢索用改寫後的問題 ----
 
 def _record_queries(rag: RAG, monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -144,7 +135,7 @@ def _record_queries(rag: RAG, monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 def test_追問時檢索用改寫後的問題_創辦人生日(monkeypatch: pytest.MonkeyPatch) -> None:
-    chat = FakeChat(replies=[intent_json("kb", "", "創辦人阿兩的生日是哪天"), "阿兩生於 1958 年 3 月 12 日【1】"])
+    chat = FakeChat(replies=[rewrite_json("創辦人阿兩的生日是哪天"), intent_json("kb"), "阿兩生於 1958 年 3 月 12 日【1】"])
     rag = make_rag(chat)
     queries = _record_queries(rag, monkeypatch)
     history = [("你們創辦人是誰", "創辦人是阿兩。")]
@@ -158,7 +149,7 @@ def test_追問時檢索用改寫後的問題_創辦人生日(monkeypatch: pytes
 
 
 def test_追問時檢索用改寫後的問題_補發手續費(monkeypatch: pytest.MonkeyPatch) -> None:
-    chat = FakeChat(replies=[intent_json("kb", "", "信用卡補發新卡的手續費要多少錢"), "補發手續費 200 元【1】"])
+    chat = FakeChat(replies=[rewrite_json("信用卡補發新卡的手續費要多少錢"), intent_json("kb"), "補發手續費 200 元【1】"])
     rag = make_rag(chat)
     queries = _record_queries(rag, monkeypatch)
     history = [("信用卡不見了", "請立即撥打掛失專線。")]
@@ -171,7 +162,7 @@ def test_追問時檢索用改寫後的問題_補發手續費(monkeypatch: pytes
 
 
 def test_新話題時改寫結果就是原問題_不被上一題帶偏(monkeypatch: pytest.MonkeyPatch) -> None:
-    chat = FakeChat(replies=[intent_json("kb", "", "房貸最多可以貸幾成"), "最高可貸八成【1】"])
+    chat = FakeChat(replies=[rewrite_json("房貸最多可以貸幾成"), intent_json("kb"), "最高可貸八成【1】"])
     rag = make_rag(chat)
     queries = _record_queries(rag, monkeypatch)
     history = [("信用卡不見了", "請立即撥打掛失專線。")]
@@ -183,7 +174,7 @@ def test_新話題時改寫結果就是原問題_不被上一題帶偏(monkeypat
 
 
 def test_改寫欄位空白時退回用原問題檢索(monkeypatch: pytest.MonkeyPatch) -> None:
-    chat = FakeChat(replies=[intent_json("kb", "", ""), "可以【1】"])
+    chat = FakeChat(replies=[rewrite_json(""), intent_json("kb"), "可以【1】"])
     rag = make_rag(chat)
     queries = _record_queries(rag, monkeypatch)
 
@@ -197,11 +188,6 @@ def test_不再用規則判斷追問() -> None:
 
     assert not hasattr(rag_module, "is_followup")
     assert not hasattr(rag_module, "FOLLOWUP_START")
-
-
-def test_提示詞寫明追問改寫規則() -> None:
-    assert "完整問題" in INTENT_PROMPT
-    assert "原問題" in INTENT_PROMPT and "新話題" in INTENT_PROMPT
 
 
 def test_提示詞寫明關於本行的事都算查詢知識庫_拿不準選查詢知識庫() -> None:
@@ -236,7 +222,7 @@ def test_LLM判成查詢知識庫與呼叫失敗退回查詢知識庫可以分�
 # ---- #31 追問：第 2 次呼叫的客戶問題用改寫後的問題 ----
 
 def test_追問時第2次呼叫的客戶問題用改寫後的問題() -> None:
-    chat = FakeChat(replies=[intent_json("kb", "", "某某事項的細節是什麼"), "答案【1】"])
+    chat = FakeChat(replies=[rewrite_json("某某事項的細節是什麼"), intent_json("kb"), "答案【1】"])
     history = [("先問的第一題", "第一題的回答")]
 
     make_rag(chat).answer("細節呢", history)
@@ -257,13 +243,13 @@ def test_改寫欄位空白時第2次呼叫的客戶問題退回原問題() -> N
 def test_提示詞不含知識庫段落裡的專有名詞與數字() -> None:
     import re
 
-    from chatbot.rag import SYSTEM_PROMPT
+    from chatbot.rag import REWRITE_PROMPT, SYSTEM_PROMPT
 
     about = (KB / "08_about.md").read_text(encoding="utf-8")
     terms = set(re.findall(r"「([^」]+)」", about)) - {"兩津商業銀行"}  # 引號內的名稱（人名、理念）
     terms |= set(re.findall(r"\d{4}", about))  # 年份等數字
     terms |= {"阿兩", "1958", "嘉義", "茶"}
     assert "阿兩" in terms
-    for prompt in (INTENT_PROMPT, SYSTEM_PROMPT):
+    for prompt in (INTENT_PROMPT, SYSTEM_PROMPT, REWRITE_PROMPT):
         for term in terms:
             assert term not in prompt, f"提示詞含知識庫內容：{term}"

@@ -39,7 +39,7 @@ def test_聊到第4輪時只送最近3輪對話() -> None:
 
     rag.answer(FALLBACK_Q, history)
 
-    messages = chat.calls[0][1]
+    messages = chat.calls[-1][1]  # 最後一次是依段落回答的呼叫
     assert len(messages) == 3 * 2 + 1  # 3 輪＋這一題
     assert [m["content"] for m in messages[:-1]] == ["問題2", "回答2", "問題3", "回答3", "問題4", "回答4"]
 
@@ -88,7 +88,7 @@ def test_意圖與第2次呼叫都要求JSON輸出(monkeypatch: pytest.MonkeyPat
         def json(self) -> dict:
             return {"choices": [{"message": {"content": self.content}}]}
 
-    replies = ['{"intent": "kb", "reply": "", "rewritten_question": "我想存日幣"}', '{"answer": "可以【1】", "gap": false}']
+    replies = ['{"intent": "kb", "reply": ""}', '{"answer": "可以【1】", "gap": false}']
 
     def fake_post(url, headers, json, timeout):
         bodies.append(json)

@@ -7,7 +7,7 @@ import pytest
 
 import eval as eval_module
 from chatbot.gaps import DEFAULT_PATH, GapLog
-from chatbot.rag import INTENT_PROMPT, RAG, SYSTEM_PROMPT, Intent
+from chatbot.rag import INTENT_PROMPT, REWRITE_PROMPT, RAG, SYSTEM_PROMPT, Intent
 from conftest import KB, FakeEmbedder
 
 
@@ -23,10 +23,12 @@ class ScriptedChat:
     def __call__(self, system: str, messages: list[dict]) -> str:
         self.calls.append((system, messages))
         last = messages[-1]["content"]
+        if system == REWRITE_PROMPT:
+            return json.dumps({"rewritten_question": self.rewrites.get(last, last)}, ensure_ascii=False)
         if system == INTENT_PROMPT:
             code = self.intents.get(last, "kb")
             reply = "" if code == "kb" else "回覆"
-            return json.dumps({"intent": code, "reply": reply, "rewritten_question": self.rewrites.get(last, last)}, ensure_ascii=False)
+            return json.dumps({"intent": code, "reply": reply}, ensure_ascii=False)
         assert system == SYSTEM_PROMPT
         question = last.split("客戶問題：", 1)[1]
         return json.dumps(self.answers.get(question, {"answer": "好的【1】", "gap": False}), ensure_ascii=False)
@@ -94,8 +96,8 @@ def test_追問題組第二題答案含關鍵字才算對(tmp_path: Path, capsys
 
     assert passed == 1 and total == len(eval_module.FOLLOWUP_CASES)
     assert f"【追問題組】正確：1/{total}" in capsys.readouterr().out
-    second_call = [c for c in chat.calls if c[0] == INTENT_PROMPT][1]  # 第 2 題的意圖呼叫帶了第 1 題的對話
-    assert second_call[1][0]["content"] == case.first
+    rewrite_call = [c for c in chat.calls if c[0] == REWRITE_PROMPT][0]  # 第 2 題的追問改寫呼叫帶了第 1 題的對話
+    assert rewrite_call[1][0]["content"] == case.first
 
 
 def test_缺口題判成缺口才寫進缺口清單且不碰正式清單(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

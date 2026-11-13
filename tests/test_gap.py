@@ -9,8 +9,8 @@ from chatbot.gaps import GapLog
 from chatbot.rag import GAP_TEXT, RAG
 from conftest import KB, BreakableEmbedder, FakeChat
 
-KB_INTENT = json.dumps({"intent": "kb", "reply": "", "rewritten_question": "怎麼提高信用卡額度"}, ensure_ascii=False)
-GREETING_INTENT = json.dumps({"intent": "greeting", "reply": "您好", "rewritten_question": "你好"}, ensure_ascii=False)
+KB_INTENT = json.dumps({"intent": "kb", "reply": ""}, ensure_ascii=False)
+GREETING_INTENT = json.dumps({"intent": "greeting", "reply": "您好"}, ensure_ascii=False)
 GAP_ANSWER = json.dumps({"answer": "目前查不到", "gap": True}, ensure_ascii=False)
 OK_ANSWER = json.dumps({"answer": "請撥客服專線掛失【1】", "gap": False}, ensure_ascii=False)
 
@@ -67,7 +67,7 @@ def test_判斷為缺口時缺口清單多一筆(tmp_path: Path, monkeypatch: py
     assert row["source"] == "web"
     assert row["user"] == "web-1"
     assert row["question"] == "怎麼提高信用額度"
-    assert row["rewritten_question"] == "怎麼提高信用卡額度"
+    assert row["rewritten_question"] == "怎麼提高信用額度"  # 沒有對話紀錄不改寫
     assert row["time"][:2] == "20"  # ISO 時間
 
 
