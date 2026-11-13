@@ -232,6 +232,7 @@ class FollowupCase:
 FOLLOWUP_CASES = [
     FollowupCase("你們創辦人是誰", "他生日是哪天", "1958"),
     FollowupCase("信用卡不見了", "補發要多少錢", "200"),
+    FollowupCase("你們老闆是誰", "生日是哪天", "1958"),
 ]
 
 # 知識庫缺口題：本行業務但知識庫沒寫，應被判成缺口

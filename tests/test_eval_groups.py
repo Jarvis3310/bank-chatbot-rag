@@ -49,6 +49,7 @@ def test_意圖題組五類各至少兩題且含邊界題() -> None:
 def test_追問題組是兩輪對話且第二題有關鍵字() -> None:
     assert eval_module.FOLLOWUP_CASES
     assert ("你們創辦人是誰", "他生日是哪天", "1958") in [(c.first, c.second, c.keyword) for c in eval_module.FOLLOWUP_CASES]
+    assert ("你們老闆是誰", "生日是哪天", "1958") in [(c.first, c.second, c.keyword) for c in eval_module.FOLLOWUP_CASES]
 
 
 def test_意圖題組全部判對時正確率滿分(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

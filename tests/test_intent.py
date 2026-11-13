@@ -231,3 +231,39 @@ def test_LLM判成查詢知識庫與呼叫失敗退回查詢知識庫可以分�
     assert judged.intent is Intent.KNOWLEDGE_BASE and not judged.intent_failed
     for ans in (api_down, bad_format):
         assert ans.intent is Intent.KNOWLEDGE_BASE and ans.intent_failed
+
+
+# ---- #31 追問：第 2 次呼叫的客戶問題用改寫後的問題 ----
+
+def test_追問時第2次呼叫的客戶問題用改寫後的問題() -> None:
+    chat = FakeChat(replies=[intent_json("kb", "", "某某事項的細節是什麼"), "答案【1】"])
+    history = [("先問的第一題", "第一題的回答")]
+
+    make_rag(chat).answer("細節呢", history)
+
+    last = chat.calls[-1][1][-1]["content"]
+    assert "客戶問題：某某事項的細節是什麼" in last
+    assert "細節呢" not in last  # 原問題沒了前文看不懂，不再送出
+
+
+def test_改寫欄位空白時第2次呼叫的客戶問題退回原問題() -> None:
+    chat = FakeChat(replies=[intent_json("kb", "", ""), "答案【1】"])
+
+    make_rag(chat).answer(FALLBACK_Q)
+
+    assert f"客戶問題：{FALLBACK_Q}" in chat.calls[-1][1][-1]["content"]
+
+
+def test_提示詞不含知識庫段落裡的專有名詞與數字() -> None:
+    import re
+
+    from chatbot.rag import SYSTEM_PROMPT
+
+    about = (KB / "08_about.md").read_text(encoding="utf-8")
+    terms = set(re.findall(r"「([^」]+)」", about)) - {"兩津商業銀行"}  # 引號內的名稱（人名、理念）
+    terms |= set(re.findall(r"\d{4}", about))  # 年份等數字
+    terms |= {"阿兩", "1958", "嘉義", "茶"}
+    assert "阿兩" in terms
+    for prompt in (INTENT_PROMPT, SYSTEM_PROMPT):
+        for term in terms:
+            assert term not in prompt, f"提示詞含知識庫內容：{term}"
