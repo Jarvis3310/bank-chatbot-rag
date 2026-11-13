@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "純 RAG 機器人：問題怎麼找到答案",
+    "locale": "zh-TW",
+    "output": "docs/diagrams/qa-rag-only.html",
+    "quality_profile": "showcase",
+    "viewBox": [840, 532]
+  },
+  "components": [
+    { "id": "customer", "type": "external", "label": "客戶提問", "sublabel": "LINE 或網頁聊天", "pos": [40, 40], "size": [130, 64] },
+    { "id": "service", "type": "backend", "label": "客服服務", "sublabel": "每題獨立，不記對話", "pos": [250, 40], "size": [130, 64] },
+    { "id": "embed", "type": "cloud", "label": "問題轉 embedding", "sublabel": "OpenAI，只送這一句", "pos": [460, 40], "size": [130, 64], "tag": "花少量 token" },
+    { "id": "qdrant", "type": "database", "label": "Qdrant 向量庫", "sublabel": "段落＋口語問法的向量", "pos": [670, 40], "size": [130, 64], "tag": "本機，不花 token" },
+    { "id": "bm25", "type": "backend", "label": "BM25 關鍵字比對", "sublabel": "加同義詞，找字面相同", "pos": [460, 190], "size": [130, 64], "tag": "本機，不花 token" },
+    { "id": "rrf", "type": "backend", "label": "RRF 合併排名", "sublabel": "兩邊名次加總取前 4 段", "pos": [670, 190], "size": [130, 64] },
+    { "id": "reply", "type": "frontend", "label": "回覆客戶", "sublabel": "第 1 名段落原文", "pos": [670, 340], "size": [130, 64], "tag": "不用 LLM" }
+  ],
+  "connections": [
+    { "id": "ask", "from": "customer", "to": "service", "label": "問題", "variant": "emphasis" },
+    { "id": "to-embed", "from": "service", "to": "embed", "label": "問題", "variant": "emphasis" },
+    { "id": "to-bm25", "from": "service", "to": "bm25", "label": "問題" },
+    { "id": "vector", "from": "embed", "to": "qdrant", "label": "向量", "variant": "emphasis" },
+    { "id": "fallback", "from": "embed", "to": "bm25", "label": "逾時或出錯：只用關鍵字", "variant": "dashed" },
+    { "id": "rank-v", "from": "qdrant", "to": "rrf", "label": "意思排名", "variant": "emphasis" },
+    { "id": "rank-k", "from": "bm25", "to": "rrf", "label": "字面排名" },
+    { "id": "top1", "from": "rrf", "to": "reply", "label": "第 1 名", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "amber", "title": "哪裡花 token", "items": [
+      "只有問題轉 embedding 花少量 token，只送客戶這一句",
+      "沒有 LLM：回覆是知識庫段落原文，加上參考出處",
+      "整份知識庫不會送出去，只在服務啟動時載入"
+    ] },
+    { "dot": "violet", "title": "為什麼用兩種檢索", "items": [
+      "embedding 懂意思：「卡不見了」找得到「遺失」",
+      "BM25 比字面：數字、專有名詞比對得準，也不用網路",
+      "查不到時回固定訊息；追問會被當成新問題"
+    ] },
+    { "dot": "rose", "title": "退回模式", "items": [
+      "embedding 超過 2 秒或出錯，改成只用 BM25＋同義詞",
+      "之後 60 秒內不再試，避免斷網時每題都多等",
+      "客戶照樣拿得到答案，只是少了「懂意思」那一邊"
+    ] }
+  ]
+}

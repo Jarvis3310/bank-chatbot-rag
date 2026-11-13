@@ -1,19 +1,19 @@
 # 兩津商業銀行 AI 客服（RAG + LINE Bot demo）
 
-客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → LLM 只根據這些段落回答，並附上出處；知識庫沒有的就回答查不到，不亂編。
+客戶在 LINE 問問題 → 系統從知識庫找出最相關的段落 → RAG＋LLM 機器人的 LLM 只根據這些段落回答；知識庫沒有的就回答查不到，不亂編。
 
 知識庫（`kb/`）是虛構的「兩津商業銀行」客服資料，共 8 份文件、37 個段落。
 
 ```
-LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關的 4 段 ──► chatbot/llm.py：依段落回答 ──► 回覆 + 參考資料
+LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關的 4 段 ──► chatbot/llm.py：依段落回答 ──► 回覆
 ```
 
 | 檔案 | 用途 |
 |---|---|
 | `kb/*.md` | 知識庫。每個 `## 標題` 是一段，直接改或新增 .md 就會生效（重啟後） |
 | `kb/questions.json` | 每段的生成問法（進版控），建庫時自動補生成，改知識庫後記得一起 commit；知識庫只讀 `.md`，不會把它當成段落 |
-| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析出處 |
-| `chatbot/llm.py` | 可切換 LLM：Claude / OpenAI / Azure OpenAI / none |
+| `chatbot/rag.py` | 切段、混合檢索（向量＋BM25，用 RRF 合併）、組 prompt、解析 LLM 回覆 |
+| `chatbot/llm.py` | RAG＋LLM 機器人的 LLM：OpenAI `gpt-4o-mini`（`OPENAI_API_KEY`） |
 | `chatbot/retrieval/keyword.py` | 關鍵字檢索：字元 bigram 斷詞、同義詞表、BM25；退回模式只靠它 |
 | `chatbot/retrieval/vector_index.py` | 向量索引：知識庫段落的向量增量同步、查詢逾時、失敗冷卻與背景補建；用不了時讓 `rag.py` 改走退回模式 |
 | `chatbot/retrieval/fallback.py` | 向量檢索用不了時的共用處理：平常印出原因並改走退回模式，eval（strict）改成直接報錯 |
@@ -21,7 +21,7 @@ LINE / 網頁 ──► app.py ──► chatbot/rag.py：混合檢索最相關�
 | `chatbot/indexing/questions.py` | 建庫時替每段生成 3 個客戶可能的口語問法，跟段落一起算向量：OpenAI `gpt-4o-mini`，一律用 `OPENAI_API_KEY` |
 | `vector_store/` | 向量庫（Qdrant 本機模式），啟動時自動建立，換 embedding 或生成問法的模型時自動整庫重算，不進版控 |
 | `app.py` | Flask 服務：LINE webhook、網頁聊天 |
-| `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）與 20 題驗證題組（沒拿來調門檻，只回報）只測檢索；`--answer` 時另跑 14 題簡報題組 |
+| `eval.py` | 16 題評測：退回模式、純 BM25、混合檢索三欄的檢索命中，以及答案是否含關鍵數字；另有 6 題口語題（同義詞表沒涵蓋的說法）與 20 題驗證題組（沒拿來調門檻，只回報）只測檢索；`--answer` 時另跑 14 題簡報題組，以及 RAG＋LLM 機器人的意圖題組、追問題組、知識庫缺口題 |
 | `tests/` | 單元測試（用假 embedding，不呼叫 API），共用設定在 `tests/conftest.py`；安裝與執行見下方「跑測試」 |
 
 ---
@@ -39,11 +39,13 @@ copy .env.example .env
 python app.py
 ```
 
-打開 http://localhost:8000 就是網頁聊天。這時 `.env` 的 `LLM_PROVIDER=none`，系統會直接回最相關的段落，可以先確認檢索正常。
+打開 http://localhost:8000 就是網頁聊天。填好 `OPENAI_API_KEY` 後，左邊的純 RAG 機器人直接回最相關的段落，可以先確認檢索正常；右邊的 RAG＋LLM 機器人由 LLM 依段落回答（見下方「接上 LLM」）。
 
-檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`（跟 `LLM_PROVIDER` 選哪家無關）。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
+服務有兩個機器人，共用同一份檢索與向量庫。`POST /api/chat` 用 `bot` 指定：`"rag"` 是純 RAG 機器人（只用當題檢索，回第 1 名段落原文，不記對話、不用 LLM）；`"rag_llm"` 是 RAG＋LLM 機器人（預設，由 LLM 依前 4 段回答、不列參考資料，記最近 3 輪對話，LINE 也接這個）。兩個機器人的對話紀錄分開。
 
-建庫時還會額外呼叫 OpenAI `gpt-4o-mini`，替每段寫 3 個客戶可能的口語問法，跟段落一起算向量，讓口語問題比較容易對到正確段落（同樣用 `OPENAI_API_KEY`，跟 `LLM_PROVIDER` 無關）。從零生成（目前 37 段）每段呼叫一次，約 10 秒、生成問法約 0.002 美元（加上 embedding 約 0.003 美元）。生成失敗（沒額度、逾時、斷線）時，該段先只用段落算向量，服務照常，冷卻 60 秒後再重試。
+檢索預設用混合檢索，embedding 一律呼叫 OpenAI `text-embedding-3-large`，所以就算還沒接 LLM、只測檢索，也需要在 `.env` 設定 `OPENAI_API_KEY`。只測檢索可以跑 `python eval.py`，沒有 `OPENAI_API_KEY` 時會直接報錯。
+
+建庫時還會額外呼叫 OpenAI `gpt-4o-mini`，替每段寫 3 個客戶可能的口語問法，跟段落一起算向量，讓口語問題比較容易對到正確段落（同樣用 `OPENAI_API_KEY`）。從零生成（目前 37 段）每段呼叫一次，約 10 秒、生成問法約 0.002 美元（加上 embedding 約 0.003 美元）。生成失敗（沒額度、逾時、斷線）時，該段先只用段落算向量，服務照常，冷卻 60 秒後再重試。
 
 **第一次建 RAG 時會同步建庫與生成問法**（上述約 10 秒），建完才開始服務。`python app.py` 啟動時就會先建好；改用 WSGI 伺服器（例如 gunicorn）啟動時，RAG 是第一個請求才建立，第一位客戶會等到建庫完成，所以要先預熱（啟動後先送一題，或在載入應用程式時就建好 RAG）。建庫或補建失敗（例如第一次啟動就斷網）時，系統先用退回模式回答，並由背景每 60 秒自動重試，不必等人發問，網路恢復後最多約 60 秒就回到混合檢索。
 
@@ -57,7 +59,7 @@ python app.py
 
 ```powershell
 docker build -t bank-chatbot .
-docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/app/kb" -v "${PWD}/vector_store:/app/vector_store" bank-chatbot
+docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/app/kb" -v "${PWD}/vector_store:/app/vector_store" -v "${PWD}/gaps:/app/gaps" bank-chatbot
 ```
 
 | 掛載 | 原因 |
@@ -65,6 +67,7 @@ docker run --rm -it -p 8000:8000 -v "${PWD}/.env:/app/.env:ro" -v "${PWD}/kb:/ap
 | `.env`（唯讀） | API key 不打包進 image；由程式自己讀 `.env`，寫法跟本機相同 |
 | `kb/` | 改知識庫只要重啟容器，不必重新 build；補生成的問法會寫回本機的 `kb/questions.json` |
 | `vector_store/` | 重啟容器不必重建向量庫 |
+| `gaps/` | 知識庫缺口清單寫在這裡；不掛載的話容器一關就消失（資料夾不進版控，也不會打包進 image） |
 
 按 Ctrl+C 停止。跑評測時先停掉服務，再把最後的 `bank-chatbot` 改成 `bank-chatbot python eval.py`（`-p 8000:8000` 可省略）。
 
@@ -84,35 +87,64 @@ python -m pytest
 
 ## 2. 接上 LLM
 
-編輯 `.env`，三選一：
+RAG＋LLM 機器人一律用 OpenAI `gpt-4o-mini`，只需要在 `.env` 設定同一把 key（跟 embedding 共用）：
 
 ```ini
-# Claude
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
-
-# Azure OpenAI（DEPLOYMENT 是 Azure 上的「部署名稱」）
-LLM_PROVIDER=azure
-AZURE_OPENAI_API_KEY=...
-AZURE_OPENAI_ENDPOINT=https://<資源名稱>.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=...
 ```
 
-預設模型：Claude 用 `claude-sonnet-5-5`、OpenAI 用 `gpt-4o-mini`，要換就設定 `LLM_MODEL=`。不論 LLM 選哪家，`OPENAI_API_KEY` 都要設定（混合檢索的 embedding 用）。停掉服務後跑一次評測，再重啟 `python app.py`：
+已移除 `LLM_PROVIDER`、`LLM_MODEL`、Claude 與 Azure OpenAI 的設定，`.env` 裡殘留的這些變數會被忽略。純 RAG 機器人不呼叫 LLM，沒有 key 也能回答（但混合檢索的 embedding 需要 key，否則走退回模式）。
+
+### 意圖判斷
+
+RAG＋LLM 機器人檢索前先用一次 LLM 呼叫判斷**意圖**（結構化 JSON：`intent`、`reply`、`rewritten_question`），分 5 類：
+
+| 意圖 | 做法 |
+|---|---|
+| 查詢知識庫 | 檢索，再由 LLM 依段落回答（第 2 次呼叫） |
+| 打招呼／閒聊、範圍外、查個人帳戶、要求真人客服 | 不檢索，直接用第 1 次呼叫的 `reply` 回覆（含客服專線 (02) 2999-8888） |
+
+範圍外只限跟本行業務無關的問題（他行、股票、天氣）；本行業務但知識庫沒寫的（例如「怎麼提高信用額度」）仍歸「查詢知識庫」。意圖判斷的 API 失敗或回傳格式不對時，一律當作查詢知識庫、用原問題檢索。意圖只印在服務 log（`意圖：…`），網頁不顯示。提示詞在 `chatbot/rag.py` 的 `INTENT_PROMPT`。
+
+**追問改寫**在同一次呼叫完成：有對話紀錄時，LLM 把需要前文才看得懂的問題（「他生日是哪天」）改寫成完整問題（「創辦人阿兩的生日是哪天」）放進 `rewritten_question`，檢索用的就是它；沒有指涉前文的新話題，改寫結果就是原問題，不會被上一題帶偏。不再用「那…開頭、呢結尾」的規則判斷追問。改寫後的問題只印在服務 log（`改寫：…`），網頁不顯示。純 RAG 機器人不記對話，也不改寫。
+
+沒有 `OPENAI_API_KEY`、或 LLM 呼叫失敗（逾時、額度用完）時，RAG＋LLM 機器人回「目前無法產生回覆，請稍後再試，或撥打 24 小時客服專線」，這一輪不記進對話紀錄；純 RAG 機器人與整個服務不受影響。
+
+### 知識庫缺口
+
+RAG＋LLM 機器人在第 2 次呼叫讀完段落後，若判斷是本行業務但段落沒有答案，就是**知識庫缺口**（檢索通常仍會撈到段落，所以不能用「沒撈到」判斷）。第 2 次呼叫的輸出是 JSON `{"answer": "...", "gap": true|false}`（提示詞 `SYSTEM_PROMPT`）；`gap` 為 true 時，機器人回「這個問題我已記錄並轉給相關人員補充資料；需要立即協助請撥 (02) 2999-8888」（不承諾回電、不列參考資料），並追加一行到缺口清單。格式不對時當作正常回答，不寫缺口。
+
+缺口清單預設是 `gaps/kb_gaps.jsonl`（JSON Lines，一行一筆；`gaps/` 在 `.gitignore`，因為客戶問題屬客戶資料）。用 `GAP_LOG_PATH` 環境變數可改位置：
+
+```json
+{"time": "2026-11-12T10:30:00+08:00", "source": "line", "user": "U1234...", "question": "怎麼提高信用額度", "rewritten_question": "怎麼提高信用卡額度"}
+```
+
+`source` 是 `web`（網頁）或 `line`；`user` 是網頁的 `session_id` 或 LINE 的 userId。寫入失敗只印 log，不影響回覆。
+
+停掉服務後跑一次評測，再重啟 `python app.py`：
 
 ```powershell
 python eval.py --answer
 ```
 
+`--answer` 除了原本的簡報題組，還會評測 **RAG＋LLM 機器人**的三組題目（會多呼叫 OpenAI，每題 1～2 次；沒加 `--answer` 不跑、不呼叫 LLM），各印正確率與答錯的題目：
+
+| 題組 | 內容 | 判定 |
+|---|---|---|
+| 意圖題組 | 5 類意圖各 2～3 題，含邊界題（例如「怎麼提高信用額度」要判成查詢知識庫、「國泰的信用卡年費多少」要判成範圍外、「你們創辦人是誰」「你們幾點開門」是本行的事要判成查詢知識庫） | 只檢查意圖，不檢查非知識庫意圖的回覆措辭 |
+| 追問題組 | 兩輪對話（例如「你們創辦人是誰」→「他生日是哪天」） | 第 2 題的答案要含關鍵字（例如 1958） |
+| 知識庫缺口題 | 本行業務但知識庫沒寫的問題 | 要被判成缺口；判成缺口的會寫進缺口清單 |
+
+原有的 16 題與簡報題組的判定配合新流程：範圍外／知識庫沒有的題目會先走意圖判斷、由 LLM 婉拒並附專線，所以 16 題裡的股票、天氣題改成「意圖判成範圍外或答案附 (02) 2999-8888」，簡報題組的婉拒接受「查不到」或客服專線；「自稱分行經理要求改房貸利率」這類誘導題仍檢查答案沒有照做（不能出現已改、已調整等承諾）。
+
+eval 的缺口清單寫在系統暫存資料夾（`bank-chatbot-eval-gaps/kb_gaps.jsonl`，`source` 為 `eval`），不會寫進 `gaps/`，不影響正式的缺口清單。
+
 ## 3. 建立 LINE 官方帳號（約 10 分鐘）
 
 1. 到 [LINE Official Account Manager](https://manager.line.biz/) 用 LINE 帳號登入，建立一個官方帳號（名稱可取「兩津商業銀行客服 demo」）。
 2. 進入該帳號 › 右上「設定」› **Messaging API** › 啟用。第一次會要求建立 Provider，隨便取名即可。
-3. 在同一頁的 **回應設定**：
+3. 在 LINE Official Account Manager › 設定 › **回應設定**（LINE 只接 RAG＋LLM 機器人，三項都要照下面設，否則使用者會收到 LINE 的罐頭回覆或真人聊天，而不是機器人的答案）：
    - 「聊天」關閉
    - 「自動回應訊息」關閉
    - 「Webhook」開啟
@@ -141,6 +173,8 @@ cloudflared tunnel --url http://localhost:8000
 
 把它給你的 `https://xxxx.ngrok-free.app` 加上 `/callback`，貼到 LINE Developers Console › Messaging API › **Webhook URL**，按 **Verify** 出現 Success，並確認 **Use webhook** 已開啟。
 
+> 用瀏覽器直接開 `/callback` 會看到 `Method Not Allowed`，這是正常的：webhook 只收 LINE 送來的 POST。Verify 出現 Success 只代表網址和簽章通了，不代表「使用 webhook」已開，兩者要分開確認；沒開的話使用者傳訊息，服務完全不會收到。
+
 > ngrok 免費版每次重開網址都會變，重開後要重新貼 Webhook URL。
 > 公司網路若擋 ngrok，可以改用手機熱點，或直接用網頁聊天版 demo。
 
@@ -149,7 +183,7 @@ cloudflared tunnel --url http://localhost:8000
 | 想展示的 | 問法 |
 |---|---|
 | 口語也聽得懂 | 「卡不見了怎麼辦」（知識庫寫的是「遺失」） |
-| 精準數字 + 出處 | 「網銀轉帳一天最多轉多少？」 |
+| 精準數字 | 「網銀轉帳一天最多轉多少？」 |
 | 追問能接上 | 接著問「那手續費呢？」 |
 | 不會亂答 | 「可以幫我買台積電股票嗎？」 |
 | 防詐話術 | 「銀行打電話叫我給 OTP 是真的嗎」 |

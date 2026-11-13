@@ -2,7 +2,7 @@
 
 向量索引只依賴 generate() 這個介面，測試可以換成假的。
 生成的問法存在問法檔（kb/questions.json，進版控），段落沒變就沿用，重建向量庫不必再呼叫 LLM、結果可重現。
-正式使用 OpenAI chat，跟 embedding 一樣一律用 OPENAI_API_KEY（跟 LLM_PROVIDER 無關）。
+正式使用 OpenAI chat，跟 embedding 一樣一律用 OPENAI_API_KEY。
 比照 llm.py 直接呼叫 REST API，公司網路設定 HTTPS_PROXY 即可。
 """
 from __future__ import annotations
