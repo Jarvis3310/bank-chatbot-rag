@@ -94,7 +94,8 @@ def test_追問題組第二題答案含關鍵字才算對(tmp_path: Path, capsys
 
     passed, total = eval_module.run_followup_group(_rag(chat, tmp_path))
 
-    assert passed == 1 and total == len(eval_module.FOLLOWUP_CASES)
+    counted = [c for c in eval_module.FOLLOWUP_CASES if not c.known_limit]
+    assert passed == 1 and total == len(counted)
     assert f"【追問題組】正確：1/{total}" in capsys.readouterr().out
     rewrite_call = [c for c in chat.calls if c[0] == REWRITE_PROMPT][0]  # 第 2 題的追問改寫呼叫帶了第 1 題的對話
     assert rewrite_call[1][0]["content"] == case.first
@@ -186,4 +187,21 @@ def test_追問題組第二題LLM失敗時算錯(tmp_path: Path) -> None:
 
     passed, _ = eval_module.run_followup_group(rag)
 
-    assert passed < len(eval_module.FOLLOWUP_CASES)
+    assert passed < len([c for c in eval_module.FOLLOWUP_CASES if not c.known_limit])
+
+
+def test_追問題組的已知限制題不計入正確率_但仍印出結果(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    limited = [c for c in eval_module.FOLLOWUP_CASES if c.known_limit]
+    counted = [c for c in eval_module.FOLLOWUP_CASES if not c.known_limit]
+    assert limited and ("你們老闆是誰", "生日是哪天") in [(c.first, c.second) for c in limited]
+    answers = {c.second: {"answer": f"答案含 {c.keyword}", "gap": False} for c in counted}
+    limited_answers = {c.second: {"answer": "不知道", "gap": False} for c in limited}  # 已知限制題答錯
+    chat = ScriptedChat(answers=answers | limited_answers)
+
+    passed, total = eval_module.run_followup_group(_rag(chat, tmp_path))
+
+    out = capsys.readouterr().out
+    assert (passed, total) == (len(counted), len(counted))  # 答錯的已知限制題不拉低正確率，也不算在題數裡
+    assert f"【追問題組】正確：{len(counted)}/{len(counted)}" in out
+    assert "已知限制" in out and limited[0].known_limit in out
+    assert limited[0].second in out  # 結果仍印出來
