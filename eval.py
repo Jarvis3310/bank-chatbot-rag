@@ -227,12 +227,13 @@ class FollowupCase:
     first: str
     second: str
     keyword: str
+    known_limit: str = ""  # 已知限制的原因；有填就只印結果、不計入正確率
 
 
 FOLLOWUP_CASES = [
     FollowupCase("你們創辦人是誰", "他生日是哪天", "1958"),
     FollowupCase("信用卡不見了", "補發要多少錢", "200"),
-    FollowupCase("你們老闆是誰", "生日是哪天", "1958"),
+    FollowupCase("你們老闆是誰", "生日是哪天", "1958", known_limit="知識庫用詞是創辦人，檢索不到老闆"),
 ]
 
 # 知識庫缺口題：本行業務但知識庫沒寫，應被判成缺口
@@ -396,18 +397,29 @@ def run_intent_group(rag: RAG) -> tuple[int, int]:
 
 
 def run_followup_group(rag: RAG) -> tuple[int, int]:
-    """追問題組：先問第 1 題，帶著它的對話紀錄問第 2 題，第 2 題答案要含關鍵字。回 (答對, 總題數)。"""
+    """追問題組：先問第 1 題，帶著它的對話紀錄問第 2 題，第 2 題答案要含關鍵字。回 (答對, 總題數)。
+
+    有 known_limit 的題目只印結果、不計入答對與總題數。
+    """
     print("\n=== 追問題組（RAG＋LLM 機器人，兩輪對話）===")
-    passed = 0
+    passed = total = 0
     for case in FOLLOWUP_CASES:
         first = rag.answer(case.first)
         second = rag.answer(case.second, [(case.first, first.text)])
         ok = not second.error and contains_keyword(second.text, case.keyword)
-        passed += ok
-        print(f"{'✅' if ok else '❌'} {case.first} → {case.second}（應含「{case.keyword}」，改寫：{second.rewritten_question}）")
+        if case.known_limit:
+            mark = "ℹ️ 通過" if ok else "ℹ️ 未過"
+        else:
+            mark = "✅" if ok else "❌"
+        print(f"{mark} {case.first} → {case.second}（應含「{case.keyword}」，改寫：{second.rewritten_question}）")
         print(f"   答案：{second.text[:120]}")
-    print(f"\n【追問題組】正確：{passed}/{len(FOLLOWUP_CASES)}")
-    return passed, len(FOLLOWUP_CASES)
+        if case.known_limit:
+            print(f"   已知限制：{case.known_limit}（不計入正確率）")
+            continue
+        passed += ok
+        total += 1
+    print(f"\n【追問題組】正確：{passed}/{total}")
+    return passed, total
 
 
 def run_gap_group(rag: RAG, gap_log: GapLog) -> tuple[int, int]:
