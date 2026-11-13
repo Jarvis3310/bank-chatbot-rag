@@ -111,9 +111,18 @@ INTENT_LABELS = {
     Intent.HUMAN: "要求真人客服",
 }
 
-# 意圖判斷的提示詞（第 1 次 LLM 呼叫）。輸出的 JSON 欄位：intent、reply、rewritten_question。
-# 追問改寫規則在 rewritten_question 那段，檢索用它；#26 知識庫缺口在第 2 次呼叫（讀完段落）判斷，不在這裡。
-INTENT_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。先判斷客戶最新一句話的意圖，只輸出一個 JSON 物件，不要其他文字。
+# 追問改寫的提示詞（有對話紀錄才呼叫的第 1 次 LLM 呼叫）。輸出的 JSON 欄位：rewritten_question。
+REWRITE_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。把客戶最新一句話改寫成單獨看也懂的完整問題，只輸出一個 JSON 物件，不要其他文字。
+
+輸出格式：{"rewritten_question": "問題"}
+・最新一句話需要前文才看得懂（例如「他是哪一年的」「那要多少錢」「那手續費呢」），就依前面的對話補上主詞與主題，改寫成完整問題，例如前面聊「某項服務」，現在問「那費用呢」，改寫成「某項服務的費用是多少」。
+・補主詞時，優先用前文（包含上一則客服回答）出現過的具體名稱，不要沿用客戶口語的泛稱；前文已出現的具體人名、品名要原樣寫進改寫結果。
+・最新一句話本身已完整、或是跟前文無關的新話題（例如前面聊某項服務，現在問另一項服務的問題），改寫結果就是原問題，一字不改；不要把前一題的主題帶進來。
+・只改寫、不回答；不要加入對話中沒出現過的資訊。"""
+
+# 意圖判斷的提示詞（用改寫後的完整問題，第 2 次 LLM 呼叫；沒有對話紀錄時是第 1 次）。輸出的 JSON 欄位：intent、reply。
+# #26 知識庫缺口在讀完段落後的呼叫判斷，不在這裡。
+INTENT_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。先判斷客戶這句話的意圖，只輸出一個 JSON 物件，不要其他文字。
 
 意圖（intent 欄位只能填括號裡的代碼）共 5 類：
 ・查詢知識庫（kb）：凡是關於本行的問題都歸這一類，包括產品、服務、手續費、流程、規定，也包括銀行本身的介紹、創辦人、營業時間、據點。本行業務但知識庫沒寫的問題（例如問某項本行服務的細節，但知識庫沒寫），一律歸這一類，不要歸範圍外。拿不準時選查詢知識庫。
@@ -122,16 +131,9 @@ INTENT_PROMPT = """你是「兩津商業銀行」的 LINE 客服助理。先判�
 ・查個人帳戶（account）：要查自己的餘額、交易明細、帳單、額度使用情形等個人資料。你無法查詢任何個人資料。只限客戶要「看自己的資料」；問怎麼操作、解鎖、重設、申請（例如「密碼被鎖住了怎麼辦」）是在問辦法，歸查詢知識庫。
 ・要求真人客服（human）：要找真人、專人、客服人員。
 
-輸出格式：{"rewritten_question": "問題", "intent": "代碼", "reply": "回覆文字"}
-・欄位依上面順序輸出：先完成 rewritten_question，再用改寫後的完整問題判斷 intent；最新一句話太短、缺主詞時，不要只看那一句就判成範圍外。
+輸出格式：{"intent": "代碼", "reply": "回覆文字"}
 ・intent 不是 kb 時，reply 就是你直接給客戶的回覆；intent 是 kb 時 reply 填空字串。
-・rewritten_question（追問改寫）：把客戶最新一句話改寫成單獨看也懂的完整問題，供檢索使用。
-  - 最新一句話需要前文才看得懂（例如「他是哪一年的」「那要多少錢」「那手續費呢」），就依前面的對話補上主詞與主題，改寫成完整問題，例如前面聊「某項服務」，現在問「那費用呢」，改寫成「某項服務的費用是多少」。
-  - 補主詞時，優先用前文（包含上一則客服回答）出現過的具體名稱，不要沿用客戶口語的泛稱；前文已出現的具體人名、品名要原樣寫進改寫結果。
-  - 追問承接前文的本行話題，意圖就跟前文一樣歸查詢知識庫，不要因為句子很短、缺主詞而判成範圍外。
-  - 最新一句話本身已完整、或是跟前文無關的新話題（例如前面聊某項服務，現在問另一項服務的問題），改寫結果就是原問題，一字不改；不要把前一題的主題帶進來。
-  - 沒有前文時，一律填原問題。
-  - 只改寫、不回答；不要加入對話中沒出現過的資訊。
+・你收到的已經是改寫成單獨看也懂的完整問題，直接依它的意思判斷意圖。
 
 回覆規則（只適用於 reply）：
 1. 繁體中文，口吻親切、簡潔，適合在 LINE 閱讀，不要用 Markdown，100 字內。
@@ -179,19 +181,28 @@ def parse_answer(raw: str) -> tuple[str, bool]:
     return answer, data.get("gap") is True
 
 
-def parse_intent(raw: str) -> tuple[Intent, str, str] | None:
-    """解析意圖呼叫的 JSON，回 (意圖, reply, rewritten_question)；格式不對回 None。允許 ```json 程式碼框。"""
+def parse_intent(raw: str) -> tuple[Intent, str] | None:
+    """解析意圖呼叫的 JSON，回 (意圖, reply)；格式不對回 None。允許 ```json 程式碼框。"""
     try:
         data = _load_json(raw)
         intent = Intent(data["intent"])
     except (ValueError, KeyError, TypeError):
         return None
-    reply, rewritten = data.get("reply"), data.get("rewritten_question")
+    reply = data.get("reply")
     reply = reply.strip() if isinstance(reply, str) else ""
-    rewritten = rewritten.strip() if isinstance(rewritten, str) else ""
     if intent is not Intent.KNOWLEDGE_BASE and not reply:
         return None
-    return intent, reply, rewritten
+    return intent, reply
+
+
+def parse_rewrite(raw: str) -> str | None:
+    """解析追問改寫呼叫的 JSON，回改寫後的問題；格式不對或空白回 None。"""
+    try:
+        rewritten = _load_json(raw)["rewritten_question"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    rewritten = rewritten.strip() if isinstance(rewritten, str) else ""
+    return rewritten or None
 
 
 @dataclass
@@ -219,7 +230,7 @@ class Answer:
     retrieved: list[Hit]
     error: bool = False  # LLM 沒設定或呼叫失敗：text 是錯誤訊息，不算一輪對話
     intent: Intent | None = None  # RAG＋LLM 機器人判斷的意圖；純 RAG 機器人與 LLM 失敗時是 None
-    rewritten_question: str = ""  # 追問改寫後的問題（意圖呼叫回傳的 rewritten_question），檢索用它
+    rewritten_question: str = ""  # 追問改寫後的問題（沒有對話紀錄或改寫失敗時就是原問題），意圖判斷、檢索與回答都用它
     intent_failed: bool = False  # 意圖呼叫失敗（API 錯誤或格式不對）而退回查詢知識庫；LLM 自己判成查詢知識庫時是 False
     gap: bool = False  # 知識庫缺口：LLM 讀完段落判斷沒有答案；text 已換成 GAP_TEXT，由呼叫端寫進缺口清單
 
@@ -304,15 +315,30 @@ class RAG:
             return self._bm25_hits(expand_query(query))
         return self._hybrid(query, dict(sims))
 
-    def _judge_intent(self, question: str, history: list[tuple[str, str]]) -> tuple[Intent, str, str, bool]:
-        """第 1 次 LLM 呼叫：回 (意圖, 非知識庫意圖的回覆, 改寫後的問題, 是否呼叫失敗)。
+    def _rewrite(self, question: str, history: list[tuple[str, str]]) -> str:
+        """追問改寫（LLM 呼叫）：回單獨看也懂的完整問題。沒有對話紀錄不呼叫；失敗或空白退回原問題。"""
+        if not history:
+            return question
+        messages = _to_messages(history) + [{"role": "user", "content": question}]
+        try:
+            raw = self._chat(REWRITE_PROMPT, messages)
+        except Exception as e:
+            print("追問改寫的 LLM 呼叫失敗，用原問題：", repr(e))
+            return question
+        rewritten = parse_rewrite(raw)
+        if rewritten is None:
+            print("追問改寫回傳格式不對，用原問題：", raw[:200])
+            return question
+        return rewritten
+
+    def _judge_intent(self, question: str) -> tuple[Intent, str, bool]:
+        """意圖判斷（LLM 呼叫），question 是改寫後的完整問題：回 (意圖, 非知識庫意圖的回覆, 是否呼叫失敗)。
 
         API 失敗或格式不對（不是 JSON、意圖不認得、非知識庫意圖卻沒有回覆）一律當作查詢知識庫，最後一欄為 True。
         """
-        fallback = (Intent.KNOWLEDGE_BASE, "", question, True)
-        messages = _to_messages(history) + [{"role": "user", "content": question}]
+        fallback = (Intent.KNOWLEDGE_BASE, "", True)
         try:
-            raw = self._chat(INTENT_PROMPT, messages)
+            raw = self._chat(INTENT_PROMPT, [{"role": "user", "content": question}])
         except Exception as e:
             print("意圖判斷的 LLM 呼叫失敗，當作查詢知識庫：", repr(e))
             return fallback
@@ -320,18 +346,19 @@ class RAG:
         if parsed is None:
             print("意圖判斷回傳格式不對，當作查詢知識庫：", raw[:200])
             return fallback
-        intent, reply, rewritten = parsed
-        return intent, reply, rewritten or question, False
+        return parsed[0], parsed[1], False
 
     def answer(self, question: str, history: list[tuple[str, str]] | None = None) -> Answer:
         history = history or []
-        intent, reply, rewritten, intent_failed = self._judge_intent(question, history)
+        rewritten = self._rewrite(question, history)
+        intent, reply, intent_failed = self._judge_intent(rewritten)
         print(f"意圖：{intent.label}｜問題：{question}｜改寫：{rewritten}")
         if intent is not Intent.KNOWLEDGE_BASE:
             return Answer(reply, [], [], intent=intent, rewritten_question=rewritten)
-        hits = self.retrieve(rewritten)  # 追問改寫後的問題；新話題時 rewritten 就是原問題
+        hits = self.retrieve(rewritten)  # 追問改寫後的問題；新話題或沒有對話紀錄時 rewritten 就是原問題
 
         context = "\n\n".join(f"{h.chunk.label}\n{h.chunk.text}" for h in hits) or "（沒有找到相關資料）"
+        # 回答時客戶問題也用改寫後的問題：追問的原問題單獨看不懂
         messages = _to_messages(history) + [{"role": "user", "content": f"參考資料：\n{context}\n\n客戶問題：{rewritten}"}]
 
         try:
