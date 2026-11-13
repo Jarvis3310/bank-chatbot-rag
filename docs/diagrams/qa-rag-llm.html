@@ -5203,7 +5203,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / 圖版 04">
-      <svg viewBox="0 0 840 532" role="img" lang="zh-TW" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-node-ui="" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
+      <svg viewBox="0 0 840 612" role="img" lang="zh-TW" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="classic" data-quality-profile="showcase" data-node-ui="" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
         <title id="archify-diagram-title">RAG＋LLM 機器人：圖 1 再加上 LLM 的步驟</title>
         <desc id="archify-diagram-description">由 Archify 產生的架構圖。</desc>
         <!-- Definitions -->
@@ -5258,52 +5258,56 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <path data-edge-from="customer" data-edge-to="service" data-edge-label="問題" data-edge-key="0" data-edge-id="ask" data-composition-points="170,72;250,72" data-composition-crossover="halo" data-composition-independent="true" d="M 170 72 L 250 72" class="a-emphasis" data-animate="edge" style="--step:0" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:1">
-          <path data-graph-role="automatic-crossover-underlay" d="M 380 63.95 L 460 63.95" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="service" data-edge-to="intent" data-edge-label="問題＋對話" data-edge-key="1" data-edge-id="to-intent" data-composition-points="380,63.95;460,63.95" data-composition-crossover="halo" data-composition-independent="true" d="M 380 63.95 L 460 63.95" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 380 72 L 460 72" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="service" data-edge-to="rewrite" data-edge-label="問題＋對話" data-edge-key="1" data-edge-id="to-rewrite" data-composition-points="380,72;460,72" data-composition-crossover="halo" data-composition-independent="true" d="M 380 72 L 460 72" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:2">
-          <path data-graph-role="automatic-crossover-underlay" d="M 460 79 L 428 79 Q 420 79 420 87 L 420 184 Q 420 192 412 192 L 380 192" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="intent" data-edge-to="other" data-edge-label="非查知識庫" data-edge-key="2" data-edge-id="non-kb" data-composition-points="460,79;420,79;420,192;380,192" data-composition-crossover="halo" data-composition-independent="true" d="M 460 79 L 428 79 Q 420 79 420 87 L 420 184 Q 420 192 412 192 L 380 192" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 525 104 L 525 150" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="rewrite" data-edge-to="intent" data-edge-label="改寫後問題" data-edge-key="2" data-edge-id="to-intent" data-composition-points="525,104;525,150" data-composition-crossover="halo" data-composition-independent="true" d="M 525 104 L 525 150" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:3">
-          <path data-graph-role="automatic-crossover-underlay" d="M 590 63.95 L 670 63.95" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="intent" data-edge-to="embed" data-edge-label="改寫後問題" data-edge-key="3" data-edge-id="to-embed" data-composition-points="590,63.95;670,63.95" data-composition-crossover="halo" data-composition-independent="true" d="M 590 63.95 L 670 63.95" class="a-emphasis" data-animate="edge" style="--step:3" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 460 182 L 380 182" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="intent" data-edge-to="other" data-edge-label="非查知識庫" data-edge-key="3" data-edge-id="non-kb" data-composition-points="460,182;380,182" data-composition-crossover="halo" data-composition-independent="true" d="M 460 182 L 380 182" class="a-default" data-animate="edge" style="--step:3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:4">
-          <path data-graph-role="automatic-crossover-underlay" d="M 525 104 L 525 160" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="intent" data-edge-to="bm25" data-edge-label="改寫後" data-edge-key="4" data-edge-id="to-bm25" data-composition-points="525,104;525,160" data-composition-crossover="halo" data-composition-independent="true" d="M 525 104 L 525 160" class="a-default" data-animate="edge" style="--step:4" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 590 173.95 L 670 173.95" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="intent" data-edge-to="embed" data-edge-label="查知識庫" data-edge-key="4" data-edge-id="to-embed" data-composition-points="590,173.95;670,173.95" data-composition-crossover="halo" data-composition-independent="true" d="M 590 173.95 L 670 173.95" class="a-emphasis" data-animate="edge" style="--step:4" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:5">
-          <path data-graph-role="automatic-crossover-underlay" d="M 735 104 L 735 160" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="embed" data-edge-to="qdrant" data-edge-label="向量" data-edge-key="5" data-edge-id="vector" data-composition-points="735,104;735,160" data-composition-crossover="halo" data-composition-independent="true" d="M 735 104 L 735 160" class="a-emphasis" data-animate="edge" style="--step:5" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 525 214 L 525 260" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="intent" data-edge-to="bm25" data-edge-label="改寫後" data-edge-key="5" data-edge-id="to-bm25" data-composition-points="525,214;525,260" data-composition-crossover="halo" data-composition-independent="true" d="M 525 214 L 525 260" class="a-default" data-animate="edge" style="--step:5" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:6">
-          <path data-graph-role="automatic-crossover-underlay" d="M 670 79 L 638 79 Q 630 79 630 87 L 630 184 Q 630 192 622 192 L 590 192" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="embed" data-edge-to="bm25" data-edge-label="逾時：只用關鍵字" data-edge-key="6" data-edge-id="fallback" data-composition-points="670,79;630,79;630,192;590,192" data-composition-crossover="halo" data-composition-independent="true" d="M 670 79 L 638 79 Q 630 79 630 87 L 630 184 Q 630 192 622 192 L 590 192" class="a-dashed" data-animate="edge" style="--step:6" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 735 214 L 735 260" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="embed" data-edge-to="qdrant" data-edge-label="向量" data-edge-key="6" data-edge-id="vector" data-composition-points="735,214;735,260" data-composition-crossover="halo" data-composition-independent="true" d="M 735 214 L 735 260" class="a-emphasis" data-animate="edge" style="--step:6" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
-          <path data-graph-role="automatic-crossover-underlay" d="M 686 224 L 686 288 Q 686 296 678 296 L 590 296" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="qdrant" data-edge-to="rrf" data-edge-label="意思排名" data-edge-key="7" data-edge-id="rank-v" data-composition-points="686,224;686,296;590,296" data-composition-crossover="halo" data-composition-independent="true" d="M 686 224 L 686 288 Q 686 296 678 296 L 590 296" class="a-emphasis" data-animate="edge" style="--step:7" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 670 189 L 638 189 Q 630 189 630 197 L 630 284 Q 630 292 622 292 L 590 292" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="embed" data-edge-to="bm25" data-edge-label="逾時：只用關鍵字" data-edge-key="7" data-edge-id="fallback" data-composition-points="670,189;630,189;630,292;590,292" data-composition-crossover="halo" data-composition-independent="true" d="M 670 189 L 638 189 Q 630 189 630 197 L 630 284 Q 630 292 622 292 L 590 292" class="a-dashed" data-animate="edge" style="--step:7" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:8">
-          <path data-graph-role="automatic-crossover-underlay" d="M 525 224 L 525 280" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="bm25" data-edge-to="rrf" data-edge-label="字面排名" data-edge-key="8" data-edge-id="rank-k" data-composition-points="525,224;525,280" data-composition-crossover="halo" data-composition-independent="true" d="M 525 224 L 525 280" class="a-default" data-animate="edge" style="--step:8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 686 324 L 686 378 Q 686 386 678 386 L 590 386" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="qdrant" data-edge-to="rrf" data-edge-label="意思排名" data-edge-key="8" data-edge-id="rank-v" data-composition-points="686,324;686,386;590,386" data-composition-crossover="halo" data-composition-independent="true" d="M 686 324 L 686 378 Q 686 386 678 386 L 590 386" class="a-emphasis" data-animate="edge" style="--step:8" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:9">
-          <path data-graph-role="automatic-crossover-underlay" d="M 525 344 L 525 400" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="rrf" data-edge-to="llm" data-edge-label="前 4 段" data-edge-key="9" data-edge-id="top4" data-composition-points="525,344;525,400" data-composition-crossover="halo" data-composition-independent="true" d="M 525 344 L 525 400" class="a-emphasis" data-animate="edge" style="--step:9" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 525 324 L 525 370" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="bm25" data-edge-to="rrf" data-edge-label="字面排名" data-edge-key="9" data-edge-id="rank-k" data-composition-points="525,324;525,370" data-composition-crossover="halo" data-composition-independent="true" d="M 525 324 L 525 370" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:10">
-          <path data-graph-role="automatic-crossover-underlay" d="M 590 432 L 670 432" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="llm" data-edge-to="gaplog" data-edge-label="段落沒答案" data-edge-key="10" data-edge-id="gap" data-composition-points="590,432;670,432" data-composition-crossover="halo" data-composition-independent="true" d="M 590 432 L 670 432" class="a-dashed" data-animate="edge" style="--step:10" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 525 434 L 525 480" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="rrf" data-edge-to="llm" data-edge-label="前 4 段" data-edge-key="10" data-edge-id="top4" data-composition-points="525,434;525,480" data-composition-crossover="halo" data-composition-independent="true" d="M 525 434 L 525 480" class="a-emphasis" data-animate="edge" style="--step:10" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:11">
-          <path data-graph-role="automatic-crossover-underlay" d="M 460 432 L 380 432" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="llm" data-edge-to="reply" data-edge-label="答案或缺口回覆" data-edge-key="11" data-edge-id="answer" data-composition-points="460,432;380,432" data-composition-crossover="halo" data-composition-independent="true" d="M 460 432 L 380 432" class="a-emphasis" data-animate="edge" style="--step:11" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 590 512 L 670 512" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="llm" data-edge-to="gaplog" data-edge-label="段落沒答案" data-edge-key="11" data-edge-id="gap" data-composition-points="590,512;670,512" data-composition-crossover="halo" data-composition-independent="true" d="M 590 512 L 670 512" class="a-dashed" data-animate="edge" style="--step:11" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:12">
-          <path data-graph-role="automatic-crossover-underlay" d="M 315 224 L 315 400" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="other" data-edge-to="reply" data-edge-label="直接回覆" data-edge-key="12" data-edge-id="direct" data-composition-points="315,224;315,400" data-composition-crossover="halo" data-composition-independent="true" d="M 315 224 L 315 400" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 460 512 L 380 512" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="llm" data-edge-to="reply" data-edge-label="答案或缺口回覆" data-edge-key="12" data-edge-id="answer" data-composition-points="460,512;380,512" data-composition-crossover="halo" data-composition-independent="true" d="M 460 512 L 380 512" class="a-emphasis" data-animate="edge" style="--step:12" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        </g>
+        <g data-graph-role="automatic-crossover" style="--step:13">
+          <path data-graph-role="automatic-crossover-underlay" d="M 315 214 L 315 480" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="other" data-edge-to="reply" data-edge-label="直接回覆" data-edge-key="13" data-edge-id="direct" data-composition-points="315,214;315,480" data-composition-crossover="halo" data-composition-independent="true" d="M 315 214 L 315 480" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         </g>
 
         <!-- Components -->
@@ -5331,115 +5335,127 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="fine" x="315" y="96" class="t-backend" font-size="7" text-anchor="middle">記最近 3 輪對話</text>
         </g>
 
-        <g id="node-intent" data-node-id="intent" data-node-label="意圖判斷＋追問改寫" tabindex="0" role="button" aria-label="聚焦意圖判斷＋追問改寫，新增：同一次呼叫, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="新增：同一次呼叫" data-node-tag="同一次，花 token" data-node-context="架構元件">
-          <title>意圖判斷＋追問改寫 · 新增：同一次呼叫 · 架構元件 · 同一次，花 token</title>
+        <g id="node-rewrite" data-node-id="rewrite" data-node-label="追問改寫" tabindex="0" role="button" aria-label="聚焦追問改寫，新增：有對話才呼叫, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="新增：有對話才呼叫" data-node-tag="有對話才花 token" data-node-context="架構元件">
+          <title>追問改寫 · 新增：有對話才呼叫 · 架構元件 · 有對話才花 token</title>
           <rect x="460" y="40" width="130" height="64" rx="8" class="c-mask"/>
           <rect x="460" y="40" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:2" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(466 46) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="525" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">意圖判斷＋追問改寫</text>
-        <text data-detail="context" x="525" y="86" class="t-muted" font-size="9" text-anchor="middle">新增：同一次呼叫</text>
-        <text data-detail="fine" x="525" y="96" class="t-cloud" font-size="7" text-anchor="middle">同一次，花 token</text>
-        </g>
-
-        <g id="node-embed" data-node-id="embed" data-node-label="問題轉 embedding" tabindex="0" role="button" aria-label="聚焦問題轉 embedding，OpenAI，只送改寫後, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="OpenAI，只送改寫後" data-node-tag="花少量 token" data-node-context="架構元件">
-          <title>問題轉 embedding · OpenAI，只送改寫後 · 架構元件 · 花少量 token</title>
-          <rect x="670" y="40" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="670" y="40" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:4" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(676 46) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="735" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">問題轉 embedding</text>
-        <text data-detail="context" x="735" y="86" class="t-muted" font-size="9" text-anchor="middle">OpenAI，只送改寫後</text>
-        <text data-detail="fine" x="735" y="96" class="t-cloud" font-size="7" text-anchor="middle">花少量 token</text>
+          <text data-node-label="" data-detail-anchor="" x="525" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">追問改寫</text>
+        <text data-detail="context" x="525" y="86" class="t-muted" font-size="9" text-anchor="middle">新增：有對話才呼叫</text>
+        <text data-detail="fine" x="525" y="96" class="t-cloud" font-size="7" text-anchor="middle">有對話才花 token</text>
         </g>
 
         <g id="node-other" data-node-id="other" data-node-label="LLM 直接回覆" tabindex="0" role="button" aria-label="聚焦LLM 直接回覆，新增：打招呼、範圍外, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="新增：打招呼、範圍外" data-node-tag="不檢索，花 token" data-node-context="架構元件">
           <title>LLM 直接回覆 · 新增：打招呼、範圍外 · 架構元件 · 不檢索，花 token</title>
-          <rect x="250" y="160" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="250" y="160" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:3" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(256 166) scale(0.6875)">
+          <rect x="250" y="150" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="250" y="150" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:4" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(256 156) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="315" y="190" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">LLM 直接回覆</text>
-        <text data-detail="context" x="315" y="206" class="t-muted" font-size="9" text-anchor="middle">新增：打招呼、範圍外</text>
-        <text data-detail="fine" x="315" y="216" class="t-cloud" font-size="7" text-anchor="middle">不檢索，花 token</text>
+          <text data-node-label="" data-detail-anchor="" x="315" y="180" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">LLM 直接回覆</text>
+        <text data-detail="context" x="315" y="196" class="t-muted" font-size="9" text-anchor="middle">新增：打招呼、範圍外</text>
+        <text data-detail="fine" x="315" y="206" class="t-cloud" font-size="7" text-anchor="middle">不檢索，花 token</text>
+        </g>
+
+        <g id="node-intent" data-node-id="intent" data-node-label="意圖判斷" tabindex="0" role="button" aria-label="聚焦意圖判斷，新增：看改寫後的問題, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="新增：看改寫後的問題" data-node-tag="每題都花 token" data-node-context="架構元件">
+          <title>意圖判斷 · 新增：看改寫後的問題 · 架構元件 · 每題都花 token</title>
+          <rect x="460" y="150" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="460" y="150" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:3" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(466 156) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="525" y="180" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">意圖判斷</text>
+        <text data-detail="context" x="525" y="196" class="t-muted" font-size="9" text-anchor="middle">新增：看改寫後的問題</text>
+        <text data-detail="fine" x="525" y="206" class="t-cloud" font-size="7" text-anchor="middle">每題都花 token</text>
+        </g>
+
+        <g id="node-embed" data-node-id="embed" data-node-label="問題轉 embedding" tabindex="0" role="button" aria-label="聚焦問題轉 embedding，OpenAI，只送改寫後, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="OpenAI，只送改寫後" data-node-tag="花少量 token" data-node-context="架構元件">
+          <title>問題轉 embedding · OpenAI，只送改寫後 · 架構元件 · 花少量 token</title>
+          <rect x="670" y="150" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="670" y="150" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:5" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(676 156) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="735" y="180" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">問題轉 embedding</text>
+        <text data-detail="context" x="735" y="196" class="t-muted" font-size="9" text-anchor="middle">OpenAI，只送改寫後</text>
+        <text data-detail="fine" x="735" y="206" class="t-cloud" font-size="7" text-anchor="middle">花少量 token</text>
         </g>
 
         <g id="node-bm25" data-node-id="bm25" data-node-label="BM25 關鍵字比對" tabindex="0" role="button" aria-label="聚焦BM25 關鍵字比對，加同義詞，找字面相同, 架構元件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="加同義詞，找字面相同" data-node-tag="本機，不花 token" data-node-context="架構元件">
           <title>BM25 關鍵字比對 · 加同義詞，找字面相同 · 架構元件 · 本機，不花 token</title>
-          <rect x="460" y="160" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="460" y="160" width="130" height="64" rx="8" class="c-backend" data-animate="node" style="--step:5" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(466 166) scale(0.6875)">
+          <rect x="460" y="260" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="460" y="260" width="130" height="64" rx="8" class="c-backend" data-animate="node" style="--step:6" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(466 266) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="525" y="190" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BM25 關鍵字比對</text>
-        <text data-detail="context" x="525" y="206" class="t-muted" font-size="9" text-anchor="middle">加同義詞，找字面相同</text>
-        <text data-detail="fine" x="525" y="216" class="t-backend" font-size="7" text-anchor="middle">本機，不花 token</text>
+          <text data-node-label="" data-detail-anchor="" x="525" y="290" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">BM25 關鍵字比對</text>
+        <text data-detail="context" x="525" y="306" class="t-muted" font-size="9" text-anchor="middle">加同義詞，找字面相同</text>
+        <text data-detail="fine" x="525" y="316" class="t-backend" font-size="7" text-anchor="middle">本機，不花 token</text>
         </g>
 
         <g id="node-qdrant" data-node-id="qdrant" data-node-label="Qdrant 向量庫" tabindex="0" role="button" aria-label="聚焦Qdrant 向量庫，段落＋口語問法的向量, 架構元件" aria-pressed="false" data-node-kind="database" data-node-sublabel="段落＋口語問法的向量" data-node-tag="本機，不花 token" data-node-context="架構元件">
           <title>Qdrant 向量庫 · 段落＋口語問法的向量 · 架構元件 · 本機，不花 token</title>
-          <rect x="670" y="160" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="670" y="160" width="130" height="64" rx="8" class="c-database" data-animate="node" style="--step:6" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(676 166) scale(0.6875)">
+          <rect x="670" y="260" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="670" y="260" width="130" height="64" rx="8" class="c-database" data-animate="node" style="--step:7" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(676 266) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="735" y="190" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Qdrant 向量庫</text>
-        <text data-detail="context" x="735" y="206" class="t-muted" font-size="9" text-anchor="middle">段落＋口語問法的向量</text>
-        <text data-detail="fine" x="735" y="216" class="t-database" font-size="7" text-anchor="middle">本機，不花 token</text>
+          <text data-node-label="" data-detail-anchor="" x="735" y="290" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Qdrant 向量庫</text>
+        <text data-detail="context" x="735" y="306" class="t-muted" font-size="9" text-anchor="middle">段落＋口語問法的向量</text>
+        <text data-detail="fine" x="735" y="316" class="t-database" font-size="7" text-anchor="middle">本機，不花 token</text>
         </g>
 
         <g id="node-rrf" data-node-id="rrf" data-node-label="RRF 合併排名" tabindex="0" role="button" aria-label="聚焦RRF 合併排名，兩邊名次加總取前 4 段, 架構元件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="兩邊名次加總取前 4 段" data-node-context="架構元件">
           <title>RRF 合併排名 · 兩邊名次加總取前 4 段 · 架構元件</title>
-          <rect x="460" y="280" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="460" y="280" width="130" height="64" rx="8" class="c-backend" data-animate="node" style="--step:8" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(466 286) scale(0.6875)">
+          <rect x="460" y="370" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="460" y="370" width="130" height="64" rx="8" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(466 376) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="525" y="310" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">RRF 合併排名</text>
-        <text data-detail="context" x="525" y="326" class="t-muted" font-size="9" text-anchor="middle">兩邊名次加總取前 4 段</text>
-        </g>
-
-        <g id="node-llm" data-node-id="llm" data-node-label="LLM 依段落回答" tabindex="0" role="button" aria-label="聚焦LLM 依段落回答，新增：只看前 4 段, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="新增：只看前 4 段" data-node-tag="主要花 token" data-node-context="架構元件">
-          <title>LLM 依段落回答 · 新增：只看前 4 段 · 架構元件 · 主要花 token</title>
-          <rect x="460" y="400" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="460" y="400" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:10" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(466 406) scale(0.6875)">
-            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="525" y="430" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">LLM 依段落回答</text>
-        <text data-detail="context" x="525" y="446" class="t-muted" font-size="9" text-anchor="middle">新增：只看前 4 段</text>
-        <text data-detail="fine" x="525" y="456" class="t-cloud" font-size="7" text-anchor="middle">主要花 token</text>
-        </g>
-
-        <g id="node-gaplog" data-node-id="gaplog" data-node-label="知識庫缺口清單" tabindex="0" role="button" aria-label="聚焦知識庫缺口清單，新增：本機檔案, 架構元件" aria-pressed="false" data-node-kind="database" data-node-sublabel="新增：本機檔案" data-node-tag="不花 token" data-node-context="架構元件">
-          <title>知識庫缺口清單 · 新增：本機檔案 · 架構元件 · 不花 token</title>
-          <rect x="670" y="400" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="670" y="400" width="130" height="64" rx="8" class="c-database" data-animate="node" style="--step:11" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(676 406) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="735" y="430" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">知識庫缺口清單</text>
-        <text data-detail="context" x="735" y="446" class="t-muted" font-size="9" text-anchor="middle">新增：本機檔案</text>
-        <text data-detail="fine" x="735" y="456" class="t-database" font-size="7" text-anchor="middle">不花 token</text>
+          <text data-node-label="" data-detail-anchor="" x="525" y="400" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">RRF 合併排名</text>
+        <text data-detail="context" x="525" y="416" class="t-muted" font-size="9" text-anchor="middle">兩邊名次加總取前 4 段</text>
         </g>
 
         <g id="node-reply" data-node-id="reply" data-node-label="回覆客戶" tabindex="0" role="button" aria-label="聚焦回覆客戶，答案, 架構元件" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="答案" data-node-context="架構元件">
           <title>回覆客戶 · 答案 · 架構元件</title>
-          <rect x="250" y="400" width="130" height="64" rx="8" class="c-mask"/>
-          <rect x="250" y="400" width="130" height="64" rx="8" class="c-frontend" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(256 406) scale(0.6875)">
+          <rect x="250" y="480" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="250" y="480" width="130" height="64" rx="8" class="c-frontend" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(256 486) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="315" y="430" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">回覆客戶</text>
-        <text data-detail="context" x="315" y="446" class="t-muted" font-size="9" text-anchor="middle">答案</text>
+          <text data-node-label="" data-detail-anchor="" x="315" y="510" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">回覆客戶</text>
+        <text data-detail="context" x="315" y="526" class="t-muted" font-size="9" text-anchor="middle">答案</text>
+        </g>
+
+        <g id="node-llm" data-node-id="llm" data-node-label="LLM 依段落回答" tabindex="0" role="button" aria-label="聚焦LLM 依段落回答，新增：只看前 4 段, 架構元件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="新增：只看前 4 段" data-node-tag="主要花 token" data-node-context="架構元件">
+          <title>LLM 依段落回答 · 新增：只看前 4 段 · 架構元件 · 主要花 token</title>
+          <rect x="460" y="480" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="460" y="480" width="130" height="64" rx="8" class="c-cloud" data-animate="node" style="--step:11" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(466 486) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="525" y="510" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">LLM 依段落回答</text>
+        <text data-detail="context" x="525" y="526" class="t-muted" font-size="9" text-anchor="middle">新增：只看前 4 段</text>
+        <text data-detail="fine" x="525" y="536" class="t-cloud" font-size="7" text-anchor="middle">主要花 token</text>
+        </g>
+
+        <g id="node-gaplog" data-node-id="gaplog" data-node-label="知識庫缺口清單" tabindex="0" role="button" aria-label="聚焦知識庫缺口清單，新增：本機檔案, 架構元件" aria-pressed="false" data-node-kind="database" data-node-sublabel="新增：本機檔案" data-node-tag="不花 token" data-node-context="架構元件">
+          <title>知識庫缺口清單 · 新增：本機檔案 · 架構元件 · 不花 token</title>
+          <rect x="670" y="480" width="130" height="64" rx="8" class="c-mask"/>
+          <rect x="670" y="480" width="130" height="64" rx="8" class="c-database" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(676 486) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="735" y="510" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">知識庫缺口清單</text>
+        <text data-detail="context" x="735" y="526" class="t-muted" font-size="9" text-anchor="middle">新增：本機檔案</text>
+        <text data-detail="fine" x="735" y="536" class="t-database" font-size="7" text-anchor="middle">不花 token</text>
         </g>
 
         <!-- Connection labels -->
@@ -5447,53 +5463,57 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <rect x="195" y="52" width="30" height="14" rx="3" class="c-mask"/>
           <text x="210" y="62" class="t-edge-emphasis" font-size="8" text-anchor="middle">問題</text>
         </g>
-        <g data-detail="context" data-edge-from="service" data-edge-to="intent" data-edge-label="問題＋對話" data-edge-key="1" data-edge-id="to-intent">
-          <rect x="391" y="43.95" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="420" y="53.95" class="t-edge-emphasis" font-size="8" text-anchor="middle">問題＋對話</text>
+        <g data-detail="context" data-edge-from="service" data-edge-to="rewrite" data-edge-label="問題＋對話" data-edge-key="1" data-edge-id="to-rewrite">
+          <rect x="391" y="52" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="420" y="62" class="t-edge-emphasis" font-size="8" text-anchor="middle">問題＋對話</text>
         </g>
-        <g data-detail="context" data-edge-from="intent" data-edge-to="other" data-edge-label="非查知識庫" data-edge-key="2" data-edge-id="non-kb">
-          <rect x="391" y="115.5" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="420" y="125.5" class="t-edge-default" font-size="8" text-anchor="middle">非查知識庫</text>
+        <g data-detail="context" data-edge-from="rewrite" data-edge-to="intent" data-edge-label="改寫後問題" data-edge-key="2" data-edge-id="to-intent">
+          <rect x="461" y="120" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="490" y="130" class="t-edge-emphasis" font-size="8" text-anchor="middle">改寫後問題</text>
         </g>
-        <g data-detail="context" data-edge-from="intent" data-edge-to="embed" data-edge-label="改寫後問題" data-edge-key="3" data-edge-id="to-embed">
-          <rect x="601" y="43.95" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="630" y="53.95" class="t-edge-emphasis" font-size="8" text-anchor="middle">改寫後問題</text>
+        <g data-detail="context" data-edge-from="intent" data-edge-to="other" data-edge-label="非查知識庫" data-edge-key="3" data-edge-id="non-kb">
+          <rect x="391" y="162" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="420" y="172" class="t-edge-default" font-size="8" text-anchor="middle">非查知識庫</text>
         </g>
-        <g data-detail="context" data-edge-from="intent" data-edge-to="bm25" data-edge-label="改寫後" data-edge-key="4" data-edge-id="to-bm25">
-          <rect x="480.20000000000005" y="125" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="499.6" y="135" class="t-edge-default" font-size="8" text-anchor="middle">改寫後</text>
+        <g data-detail="context" data-edge-from="intent" data-edge-to="embed" data-edge-label="查知識庫" data-edge-key="4" data-edge-id="to-embed">
+          <rect x="605.8" y="153.95" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="630" y="163.95" class="t-edge-emphasis" font-size="8" text-anchor="middle">查知識庫</text>
         </g>
-        <g data-detail="context" data-edge-from="embed" data-edge-to="qdrant" data-edge-label="向量" data-edge-key="5" data-edge-id="vector">
-          <rect x="699" y="125" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="714" y="135" class="t-edge-emphasis" font-size="8" text-anchor="middle">向量</text>
+        <g data-detail="context" data-edge-from="intent" data-edge-to="bm25" data-edge-label="改寫後" data-edge-key="5" data-edge-id="to-bm25">
+          <rect x="480.20000000000005" y="230" width="38.8" height="14" rx="3" class="c-mask"/>
+          <text x="499.6" y="240" class="t-edge-default" font-size="8" text-anchor="middle">改寫後</text>
         </g>
-        <g data-detail="context" data-edge-from="embed" data-edge-to="bm25" data-edge-label="逾時：只用關鍵字" data-edge-key="6" data-edge-id="fallback">
-          <rect x="586.6" y="115.5" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="630" y="125.5" class="t-edge-dashed" font-size="8" text-anchor="middle">逾時：只用關鍵字</text>
+        <g data-detail="context" data-edge-from="embed" data-edge-to="qdrant" data-edge-label="向量" data-edge-key="6" data-edge-id="vector">
+          <rect x="699" y="230" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="714" y="240" class="t-edge-emphasis" font-size="8" text-anchor="middle">向量</text>
         </g>
-        <g data-detail="context" data-edge-from="qdrant" data-edge-to="rrf" data-edge-label="意思排名" data-edge-key="7" data-edge-id="rank-v">
-          <rect x="613.8" y="276" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="638" y="286" class="t-edge-emphasis" font-size="8" text-anchor="middle">意思排名</text>
+        <g data-detail="context" data-edge-from="embed" data-edge-to="bm25" data-edge-label="逾時：只用關鍵字" data-edge-key="7" data-edge-id="fallback">
+          <rect x="586.6" y="220.5" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="630" y="230.5" class="t-edge-dashed" font-size="8" text-anchor="middle">逾時：只用關鍵字</text>
         </g>
-        <g data-detail="context" data-edge-from="bm25" data-edge-to="rrf" data-edge-label="字面排名" data-edge-key="8" data-edge-id="rank-k">
-          <rect x="470.6" y="245" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="494.8" y="255" class="t-edge-default" font-size="8" text-anchor="middle">字面排名</text>
+        <g data-detail="context" data-edge-from="qdrant" data-edge-to="rrf" data-edge-label="意思排名" data-edge-key="8" data-edge-id="rank-v">
+          <rect x="613.8" y="366" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="638" y="376" class="t-edge-emphasis" font-size="8" text-anchor="middle">意思排名</text>
         </g>
-        <g data-detail="context" data-edge-from="rrf" data-edge-to="llm" data-edge-label="前 4 段" data-edge-key="9" data-edge-id="top4">
-          <rect x="475.4" y="365" width="43.6" height="14" rx="3" class="c-mask"/>
-          <text x="497.2" y="375" class="t-edge-emphasis" font-size="8" text-anchor="middle">前 4 段</text>
+        <g data-detail="context" data-edge-from="bm25" data-edge-to="rrf" data-edge-label="字面排名" data-edge-key="9" data-edge-id="rank-k">
+          <rect x="470.6" y="340" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="494.8" y="350" class="t-edge-default" font-size="8" text-anchor="middle">字面排名</text>
         </g>
-        <g data-detail="context" data-edge-from="llm" data-edge-to="gaplog" data-edge-label="段落沒答案" data-edge-key="10" data-edge-id="gap">
-          <rect x="601" y="412" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="630" y="422" class="t-edge-dashed" font-size="8" text-anchor="middle">段落沒答案</text>
+        <g data-detail="context" data-edge-from="rrf" data-edge-to="llm" data-edge-label="前 4 段" data-edge-key="10" data-edge-id="top4">
+          <rect x="475.4" y="450" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="497.2" y="460" class="t-edge-emphasis" font-size="8" text-anchor="middle">前 4 段</text>
         </g>
-        <g data-detail="context" data-edge-from="llm" data-edge-to="reply" data-edge-label="答案或缺口回覆" data-edge-key="11" data-edge-id="answer">
-          <rect x="381.4" y="412" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="420" y="422" class="t-edge-emphasis" font-size="8" text-anchor="middle">答案或缺口回覆</text>
+        <g data-detail="context" data-edge-from="llm" data-edge-to="gaplog" data-edge-label="段落沒答案" data-edge-key="11" data-edge-id="gap">
+          <rect x="601" y="492" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="630" y="502" class="t-edge-dashed" font-size="8" text-anchor="middle">段落沒答案</text>
         </g>
-        <g data-detail="context" data-edge-from="other" data-edge-to="reply" data-edge-label="直接回覆" data-edge-key="12" data-edge-id="direct">
-          <rect x="260.6" y="305" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="284.8" y="315" class="t-edge-default" font-size="8" text-anchor="middle">直接回覆</text>
+        <g data-detail="context" data-edge-from="llm" data-edge-to="reply" data-edge-label="答案或缺口回覆" data-edge-key="12" data-edge-id="answer">
+          <rect x="381.4" y="492" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="420" y="502" class="t-edge-emphasis" font-size="8" text-anchor="middle">答案或缺口回覆</text>
+        </g>
+        <g data-detail="context" data-edge-from="other" data-edge-to="reply" data-edge-label="直接回覆" data-edge-key="13" data-edge-id="direct">
+          <rect x="260.6" y="340" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="284.8" y="350" class="t-edge-default" font-size="8" text-anchor="middle">直接回覆</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
@@ -5501,26 +5521,26 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="40" y="496" class="t-primary" font-size="12" font-weight="650">圖例</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="前端" data-legend-x="40" data-legend-baseline="516" data-legend-width="68">
-            <rect x="40" y="507" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="516" class="t-muted" font-size="10" font-weight="500">前端</text>
+          <text x="40" y="576" class="t-primary" font-size="12" font-weight="650">圖例</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="前端" data-legend-x="40" data-legend-baseline="596" data-legend-width="68">
+            <rect x="40" y="587" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+            <text x="62" y="596" class="t-muted" font-size="10" font-weight="500">前端</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="後端" data-legend-x="130" data-legend-baseline="516" data-legend-width="68">
-            <rect x="130" y="507" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="152" y="516" class="t-muted" font-size="10" font-weight="500">後端</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="後端" data-legend-x="130" data-legend-baseline="596" data-legend-width="68">
+            <rect x="130" y="587" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="152" y="596" class="t-muted" font-size="10" font-weight="500">後端</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="資料庫" data-legend-x="220" data-legend-baseline="516" data-legend-width="81">
-            <rect x="220" y="507" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="242" y="516" class="t-muted" font-size="10" font-weight="500">資料庫</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="資料庫" data-legend-x="220" data-legend-baseline="596" data-legend-width="81">
+            <rect x="220" y="587" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="242" y="596" class="t-muted" font-size="10" font-weight="500">資料庫</text>
           </g>
-          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="雲端服務" data-legend-x="323" data-legend-baseline="516" data-legend-width="93">
-            <rect x="323" y="507" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="345" y="516" class="t-muted" font-size="10" font-weight="500">雲端服務</text>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="雲端服務" data-legend-x="323" data-legend-baseline="596" data-legend-width="93">
+            <rect x="323" y="587" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="345" y="596" class="t-muted" font-size="10" font-weight="500">雲端服務</text>
           </g>
-          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="外部系統" data-legend-x="438" data-legend-baseline="516" data-legend-width="93">
-            <rect x="438" y="507" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="460" y="516" class="t-muted" font-size="10" font-weight="500">外部系統</text>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="外部系統" data-legend-x="438" data-legend-baseline="596" data-legend-width="93">
+            <rect x="438" y="587" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="460" y="596" class="t-muted" font-size="10" font-weight="500">外部系統</text>
           </g>
         </g>
       </svg>
@@ -5707,8 +5727,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>副標題寫「新增：」的是比圖 1 多出的步驟</li>
-          <li>客戶的話先分 5 類意圖，只有查詢知識庫才檢索</li>
-          <li>追問改寫成單獨看也懂的問題，再拿去檢索</li>
+          <li>有對話紀錄才先改寫：把追問改成單獨看也懂的問題</li>
+          <li>再用改寫後的問題判斷 5 類意圖，只有查詢知識庫才檢索</li>
+          <li>檢索與回答用的都是改寫後的問題</li>
         </ul>
       </div>
 
@@ -5718,9 +5739,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <h3>哪裡花 token</h3>
         </div>
         <ul>
-          <li>每題至少 1 次 LLM；查知識庫的題目共 2 次</li>
-          <li>第 2 次送規則＋前 4 段＋最近 3 輪對話</li>
-          <li>意圖判斷失敗就當作查詢知識庫，用原問題檢索</li>
+          <li>沒有對話紀錄：查知識庫 2 次 LLM，其他意圖 1 次</li>
+          <li>有對話紀錄：多 1 次改寫，查知識庫 3 次，其他意圖 2 次</li>
+          <li>回答那次送規則＋前 4 段＋最近 3 輪對話</li>
+          <li>改寫失敗用原問題；意圖判斷失敗當作查詢知識庫</li>
         </ul>
       </div>
 

@@ -8,48 +8,309 @@
     "quality_profile": "showcase"
   },
   "components": [
-    { "id": "customer", "type": "external", "label": "客戶提問", "sublabel": "LINE 或網頁聊天", "pos": [40, 40], "size": [130, 64] },
-    { "id": "service", "type": "backend", "label": "客服服務", "sublabel": "新增：記最近 3 輪對話", "pos": [250, 40], "size": [130, 64], "tag": "記最近 3 輪對話" },
-    { "id": "intent", "type": "cloud", "label": "意圖判斷＋追問改寫", "sublabel": "新增：同一次呼叫", "pos": [460, 40], "size": [130, 64], "tag": "同一次，花 token" },
-    { "id": "embed", "type": "cloud", "label": "問題轉 embedding", "sublabel": "OpenAI，只送改寫後", "pos": [670, 40], "size": [130, 64], "tag": "花少量 token" },
-    { "id": "other", "type": "cloud", "label": "LLM 直接回覆", "sublabel": "新增：打招呼、範圍外", "pos": [250, 160], "size": [130, 64], "tag": "不檢索，花 token" },
-    { "id": "bm25", "type": "backend", "label": "BM25 關鍵字比對", "sublabel": "加同義詞，找字面相同", "pos": [460, 160], "size": [130, 64], "tag": "本機，不花 token" },
-    { "id": "qdrant", "type": "database", "label": "Qdrant 向量庫", "sublabel": "段落＋口語問法的向量", "pos": [670, 160], "size": [130, 64], "tag": "本機，不花 token" },
-    { "id": "rrf", "type": "backend", "label": "RRF 合併排名", "sublabel": "兩邊名次加總取前 4 段", "pos": [460, 280], "size": [130, 64] },
-    { "id": "llm", "type": "cloud", "label": "LLM 依段落回答", "sublabel": "新增：只看前 4 段", "pos": [460, 400], "size": [130, 64], "tag": "主要花 token" },
-    { "id": "gaplog", "type": "database", "label": "知識庫缺口清單", "sublabel": "新增：本機檔案", "pos": [670, 400], "size": [130, 64], "tag": "不花 token" },
-    { "id": "reply", "type": "frontend", "label": "回覆客戶", "sublabel": "答案", "pos": [250, 400], "size": [130, 64] }
+    {
+      "id": "customer",
+      "type": "external",
+      "label": "客戶提問",
+      "sublabel": "LINE 或網頁聊天",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "service",
+      "type": "backend",
+      "label": "客服服務",
+      "sublabel": "新增：記最近 3 輪對話",
+      "pos": [
+        250,
+        40
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "記最近 3 輪對話"
+    },
+    {
+      "id": "rewrite",
+      "type": "cloud",
+      "label": "追問改寫",
+      "sublabel": "新增：有對話才呼叫",
+      "pos": [
+        460,
+        40
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "有對話才花 token"
+    },
+    {
+      "id": "other",
+      "type": "cloud",
+      "label": "LLM 直接回覆",
+      "sublabel": "新增：打招呼、範圍外",
+      "pos": [
+        250,
+        150
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "不檢索，花 token"
+    },
+    {
+      "id": "intent",
+      "type": "cloud",
+      "label": "意圖判斷",
+      "sublabel": "新增：看改寫後的問題",
+      "pos": [
+        460,
+        150
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "每題都花 token"
+    },
+    {
+      "id": "embed",
+      "type": "cloud",
+      "label": "問題轉 embedding",
+      "sublabel": "OpenAI，只送改寫後",
+      "pos": [
+        670,
+        150
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "花少量 token"
+    },
+    {
+      "id": "bm25",
+      "type": "backend",
+      "label": "BM25 關鍵字比對",
+      "sublabel": "加同義詞，找字面相同",
+      "pos": [
+        460,
+        260
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "本機，不花 token"
+    },
+    {
+      "id": "qdrant",
+      "type": "database",
+      "label": "Qdrant 向量庫",
+      "sublabel": "段落＋口語問法的向量",
+      "pos": [
+        670,
+        260
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "本機，不花 token"
+    },
+    {
+      "id": "rrf",
+      "type": "backend",
+      "label": "RRF 合併排名",
+      "sublabel": "兩邊名次加總取前 4 段",
+      "pos": [
+        460,
+        370
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "reply",
+      "type": "frontend",
+      "label": "回覆客戶",
+      "sublabel": "答案",
+      "pos": [
+        250,
+        480
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "LLM 依段落回答",
+      "sublabel": "新增：只看前 4 段",
+      "pos": [
+        460,
+        480
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "主要花 token"
+    },
+    {
+      "id": "gaplog",
+      "type": "database",
+      "label": "知識庫缺口清單",
+      "sublabel": "新增：本機檔案",
+      "pos": [
+        670,
+        480
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "不花 token"
+    }
   ],
   "connections": [
-    { "id": "ask", "from": "customer", "to": "service", "label": "問題", "variant": "emphasis" },
-    { "id": "to-intent", "from": "service", "to": "intent", "label": "問題＋對話", "variant": "emphasis" },
-    { "id": "non-kb", "from": "intent", "to": "other", "label": "非查知識庫" },
-    { "id": "to-embed", "from": "intent", "to": "embed", "label": "改寫後問題", "variant": "emphasis" },
-    { "id": "to-bm25", "from": "intent", "to": "bm25", "label": "改寫後" },
-    { "id": "vector", "from": "embed", "to": "qdrant", "label": "向量", "variant": "emphasis" },
-    { "id": "fallback", "from": "embed", "to": "bm25", "label": "逾時：只用關鍵字", "variant": "dashed" },
-    { "id": "rank-v", "from": "qdrant", "to": "rrf", "label": "意思排名", "variant": "emphasis" },
-    { "id": "rank-k", "from": "bm25", "to": "rrf", "label": "字面排名" },
-    { "id": "top4", "from": "rrf", "to": "llm", "label": "前 4 段", "variant": "emphasis" },
-    { "id": "gap", "from": "llm", "to": "gaplog", "label": "段落沒答案", "variant": "dashed" },
-    { "id": "answer", "from": "llm", "to": "reply", "label": "答案或缺口回覆", "variant": "emphasis" },
-    { "id": "direct", "from": "other", "to": "reply", "label": "直接回覆" }
+    {
+      "id": "ask",
+      "from": "customer",
+      "to": "service",
+      "label": "問題",
+      "variant": "emphasis"
+    },
+    {
+      "id": "to-rewrite",
+      "from": "service",
+      "to": "rewrite",
+      "label": "問題＋對話",
+      "variant": "emphasis"
+    },
+    {
+      "id": "to-intent",
+      "from": "rewrite",
+      "to": "intent",
+      "label": "改寫後問題",
+      "variant": "emphasis"
+    },
+    {
+      "id": "non-kb",
+      "from": "intent",
+      "to": "other",
+      "label": "非查知識庫"
+    },
+    {
+      "id": "to-embed",
+      "from": "intent",
+      "to": "embed",
+      "label": "查知識庫",
+      "variant": "emphasis"
+    },
+    {
+      "id": "to-bm25",
+      "from": "intent",
+      "to": "bm25",
+      "label": "改寫後"
+    },
+    {
+      "id": "vector",
+      "from": "embed",
+      "to": "qdrant",
+      "label": "向量",
+      "variant": "emphasis"
+    },
+    {
+      "id": "fallback",
+      "from": "embed",
+      "to": "bm25",
+      "label": "逾時：只用關鍵字",
+      "variant": "dashed"
+    },
+    {
+      "id": "rank-v",
+      "from": "qdrant",
+      "to": "rrf",
+      "label": "意思排名",
+      "variant": "emphasis"
+    },
+    {
+      "id": "rank-k",
+      "from": "bm25",
+      "to": "rrf",
+      "label": "字面排名"
+    },
+    {
+      "id": "top4",
+      "from": "rrf",
+      "to": "llm",
+      "label": "前 4 段",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gap",
+      "from": "llm",
+      "to": "gaplog",
+      "label": "段落沒答案",
+      "variant": "dashed"
+    },
+    {
+      "id": "answer",
+      "from": "llm",
+      "to": "reply",
+      "label": "答案或缺口回覆",
+      "variant": "emphasis"
+    },
+    {
+      "id": "direct",
+      "from": "other",
+      "to": "reply",
+      "label": "直接回覆"
+    }
   ],
   "cards": [
-    { "dot": "emerald", "title": "比圖 1 多了什麼", "items": [
-      "副標題寫「新增：」的是比圖 1 多出的步驟",
-      "客戶的話先分 5 類意圖，只有查詢知識庫才檢索",
-      "追問改寫成單獨看也懂的問題，再拿去檢索"
-    ] },
-    { "dot": "amber", "title": "哪裡花 token", "items": [
-      "每題至少 1 次 LLM；查知識庫的題目共 2 次",
-      "第 2 次送規則＋前 4 段＋最近 3 輪對話",
-      "意圖判斷失敗就當作查詢知識庫，用原問題檢索"
-    ] },
-    { "dot": "rose", "title": "知識庫缺口", "items": [
-      "本行業務但段落沒有答案，記進缺口清單",
-      "回覆客戶：已記錄並轉給相關人員，附客服專線",
-      "不承諾回電；LLM 出錯時回錯誤訊息，不影響圖 1"
-    ] }
+    {
+      "dot": "emerald",
+      "title": "比圖 1 多了什麼",
+      "items": [
+        "副標題寫「新增：」的是比圖 1 多出的步驟",
+        "有對話紀錄才先改寫：把追問改成單獨看也懂的問題",
+        "再用改寫後的問題判斷 5 類意圖，只有查詢知識庫才檢索",
+        "檢索與回答用的都是改寫後的問題"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "哪裡花 token",
+      "items": [
+        "沒有對話紀錄：查知識庫 2 次 LLM，其他意圖 1 次",
+        "有對話紀錄：多 1 次改寫，查知識庫 3 次，其他意圖 2 次",
+        "回答那次送規則＋前 4 段＋最近 3 輪對話",
+        "改寫失敗用原問題；意圖判斷失敗當作查詢知識庫"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "知識庫缺口",
+      "items": [
+        "本行業務但段落沒有答案，記進缺口清單",
+        "回覆客戶：已記錄並轉給相關人員，附客服專線",
+        "不承諾回電；LLM 出錯時回錯誤訊息，不影響圖 1"
+      ]
+    }
   ]
 }
